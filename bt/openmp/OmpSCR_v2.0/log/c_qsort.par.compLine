@@ -1,0 +1,1 @@
+gcc -fopenmp  -O3  -I../../include -o ../../bin/c_qsort.par c_qsort.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o 

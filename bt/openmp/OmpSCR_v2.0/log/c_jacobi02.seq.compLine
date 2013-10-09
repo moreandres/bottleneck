@@ -1,0 +1,1 @@
+gcc  -O3  -I../../include -o ../../bin/c_jacobi02.seq c_jacobi02.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o -lm

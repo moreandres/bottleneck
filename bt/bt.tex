@@ -1,0 +1,219 @@
+\documentclass[a4paper, twocolumn]{article}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage[utf8]{inputenc}
+\usepackage{tocloft}
+
+\setlength\cftbeforesecskip{1pt}
+\setlength\cftaftertoctitleskip{2pt}
+
+\setlist[enumerate]{noitemsep}
+\setlist[itemize]{noitemsep}
+
+\begin{document}
+
+\title{Performance Report}
+
+\author{\tt more.andres@gmail.com}
+
+\maketitle
+
+\abstract{Report generated using {\tt bottleneck} version {\tt 0.1}. Please report issues to {\tt more.andres@gmail.com}. Full Log: {\tt mm-full-20130707-090437.log}. Homepage \href{TBD}{http://www.github.com/amore/bottleneck}.}
+
+\tableofcontents
+
+\section{Program}
+
+This section provides details about the program being analyzed.
+It is used for results reference.
+
+\begin{enumerate}
+\item Program: {\tt @@PROGRAM@@}
+\item Timestamp: {\tt @@TIMESTAMP@@}
+\item Parameter Range: {\tt @@RANGE@@}
+\end{enumerate}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\section{System Capabilities}
+
+This section provides details about the system being used for the analysis.
+It is used as a baseline and for comparison against other configurations.
+
+\subsection{System Configuration}
+
+This subsection provides details about the bill of materials of the system.
+
+\begin{verbatim}
+@@PLATFORM@@
+\end{verbatim}
+
+\begin{verbatim}
+@@HARDWARE@@
+\end{verbatim}
+
+\begin{enumerate}
+\item Host: {\tt @@HOST@@}
+\item Distribution: {\tt @@DISTRO@@}
+\item Compiler: {\tt @@COMPILER@@}
+\item C Library: {\tt @@LIBC@@}
+\end{enumerate}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\subsection{System Performance Baseline}
+
+This subsection shows reference performance figures from well-known benchmarks.
+
+\begin{table}[H]
+\caption{Benchmarks}
+  \centering
+    \begin{tabular}{|l|l|l|}\hline
+      {\bf Benchmark} & {\bf Valor} & {\bf Unidad} \\ \hline
+      hpl & @@HPCC-HPL@@ & tflops \\ \hline
+      dgemm & @@HPCC-DGEMM@@ & mflops \\ \hline
+      ptrans & @@HPCC-PTRANS@@ & MB/s \\ \hline
+      random & @@HPCC-RANDOM@@ & MB/s \\ \hline
+      stream & @@HPCC-STREAM@@ & MB/s \\ \hline
+      fft & @@HPCC-FFT@@ & MB/s \\ \hline
+    \end{tabular}
+ \label{table:pruebas}
+\end{table}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\section{Workload}
+
+This section provides details about the workload behavior.
+
+\begin{enumerate}
+\item Execution time:
+\begin{enumerate}
+\item problem size: {\tt @@FIRST@@}
+\item geomean: {\tt @@GEOMEAN@@} seconds
+\item average: {\tt @@AVERAGE@@} seconds
+\item stddev: {\tt @@STDDEV@@}
+\item range: {\tt @@FIRST@@ - @@LAST@@} seconds % TBD: min, max?
+\item repetitions: {\tt @@COUNT@@} times
+%\item outliers: {\tt @@OUTLIERS@@}
+\end{enumerate}
+
+\begin{figure}[H]
+\label{fig:histogram}
+\centering
+\includegraphics[width=8cm]{hist.pdf}
+\caption{Results Distribution}
+\end{figure}
+
+\end{enumerate}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\section{Scalability}
+
+This section provides details about the scaling behavior of the program.
+
+\begin{figure}[H]
+\label{fig:scaling}
+\centering
+\includegraphics[width=8cm]{data.pdf}
+\caption{Problem size times}
+\end{figure}
+
+\begin{figure}[H]
+\label{fig:normal}
+\centering
+\includegraphics[width=8cm]{procs.pdf}
+\caption{Thread count times}
+\end{figure}
+
+\begin{enumerate}
+\item Parallel Fraction: {\tt @@PARALLEL@@}
+\item Serial: {\tt @@SERIAL@@}
+\item Amdalah for 1024 procs: {\tt @@AMDALAH@@ times}
+\item Gustafson for 1024 procs: {\tt @@GUSTAFSON@@ times}
+\end{enumerate}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\section{Profile}
+
+This section provides details about the execution profile of the program and the system.
+
+\subsection{Program Profiling}
+
+This subsection provides details about the program execution profile.
+
+\subsubsection{Call Graph}
+
+\begin{verbatim}
+92.6% main -> fft -> _fft -> _muldc3
+\end{verbatim}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+\subsubsection{Flat Profile}
+
+\begin{verbatim}
+@@PROFILE@@
+\end{verbatim}
+
+More: \href{TBD}{\tt @@LOG@@}
+
+Overhead: {\tt 8.1\%}
+
+\subsection{System Profiling}
+
+This subsection provide details about the system execution profile.
+
+\subsubsection{Bottlenecks}
+
+\begin{verbatim}
+@@ANNOTATION@@
+\end{verbatim}
+
+Overhead: {\tt 15\%}
+
+More: \href{TBD}{\tt mm-bottlenecks-20130707-090437.log}
+
+\subsubsection{System Resources Usage}
+
+\begin{verbatim}
+@@RESOURCES@@
+\end{verbatim}
+
+More: \href{TBD}{\tt mm-resources-20130707-090437.log}
+
+\section{Low Level}
+
+This section provide details about low level details such as vectorization and performance counters.
+
+\subsection{Vectorization Report}
+
+This subsection provide details about vectorization status of the program loops.
+
+\begin{verbatim}
+@@VECTORIZER@@
+\end{verbatim}
+
+More: \href{TBD}{\tt mm-vectorization-20130707-090437.log}
+
+\subsection{Counters Report}
+
+This subsection provides details about software and hardware counters.
+
+\begin{verbatim}
+6 CPU-migrations
+3,300 page-faults
+1230 cycles
+456 stalled-cycles-frontend
+789 stalled-cycles-backend
+123 branch-misses
+\end{verbatim}
+
+More: \href{TBD}{\tt mm-counters-20130707-090437.log}
+
+\end{document}
