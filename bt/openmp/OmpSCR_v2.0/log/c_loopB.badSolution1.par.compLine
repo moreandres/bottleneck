@@ -1,1 +1,0 @@
-gcc -fopenmp  -O3  -I../../include -o ../../bin/c_loopB.badSolution1.par c_loopB.badSolution1.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o 

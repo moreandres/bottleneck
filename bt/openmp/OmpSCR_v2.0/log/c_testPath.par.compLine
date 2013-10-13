@@ -1,1 +1,0 @@
-gcc -fopenmp  -O3  -I../../include -o ../../bin/c_testPath.par c_testPath.c AStack.o tg.o ../../common/ompscrCommon_c.o ../../common/wtime_c.o 

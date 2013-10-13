@@ -1,1 +1,0 @@
-gcc  -O3  -I../../include -o ../../bin/c_qsort.seq c_qsort.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o 

@@ -1,1 +1,0 @@
-gcc -fopenmp  -O3  -I../../include -o ../../bin/c_jacobi03.par c_jacobi03.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o -lm

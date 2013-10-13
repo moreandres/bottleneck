@@ -1,1 +1,0 @@
-gcc  -O3  -I../../include -o ../../bin/c_loopB.badSolution1.seq c_loopB.badSolution1.c  ../../common/ompscrCommon_c.o ../../common/wtime_c.o 

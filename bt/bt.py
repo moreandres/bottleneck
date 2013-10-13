@@ -224,18 +224,23 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted histogram")
 
-    data = []
+    data = {}
+    ticks = range(int(first), int(last) + 1, int(increment))
     for n in range(int(first), int(last) + 1, int(increment)):
         start = time.time()
         subprocess.call(run.format(cores, n, program), shell = True)
         end = time.time()
         elapsed = end - start
-        data.append(elapsed)
+        data[n] = elapsed
         LOG.debug("Problem at {0} took {1:.2f} seconds".format(n, elapsed))
-    array = numpy.array(data)
+    array = numpy.array(data.values())
 
-    matplotlib.pyplot.plot(data)
+    matplotlib.pyplot.plot(data.values())
     matplotlib.pyplot.xlabel('problem size in bytes')
+    matplotlib.pyplot.xticks(range(0, len(data.values())), data.keys())
+
+# TODO: add problem size as labels in X axis
+
     matplotlib.pyplot.ylabel('time in seconds')
     matplotlib.pyplot.title('data size scaling')
     matplotlib.pyplot.savefig('data.pdf', bbox_inches=0)
@@ -284,7 +289,7 @@ def main():
 
     command = ' && '.join([ build.format('"-O3 -g -pg"'),
                            run.format(cores, first, program),
-                           'gprof -l -b' ])
+                           'gprof -l -b {0}'.format(program) ])
     output = subprocess.check_output(command, shell = True)
     macros['profile'] = output
     LOG.debug("Profiling report completed")
