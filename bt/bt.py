@@ -160,6 +160,8 @@ def main():
 
     macros['range'] = str(range(int(first), int(last), int(increment)))
 
+# TBD: range here is max/min not problem range
+
     cores = str(multiprocessing.cpu_count())
 
     macros['count'] = count
@@ -204,8 +206,8 @@ def main():
     LOG.debug("Deviation: gmean {0:.2f} std {1:.2f}".format(scipy.stats.gmean(array),
                                                             numpy.std(array)))
 
-    macros['geomean'] = str(scipy.stats.gmean(array))
-    macros['stddev'] = str(numpy.std(array))
+    macros['geomean'] = "%.5f" % scipy.stats.gmean(array)
+    macros['stddev'] = "%.5f" % numpy.std(array)
 
     # min/max
 
@@ -225,7 +227,6 @@ def main():
     LOG.debug("Plotted histogram")
 
     data = {}
-    ticks = range(int(first), int(last) + 1, int(increment))
     for n in range(int(first), int(last) + 1, int(increment)):
         start = time.time()
         subprocess.call(run.format(cores, n, program), shell = True)
@@ -235,9 +236,12 @@ def main():
         LOG.debug("Problem at {0} took {1:.2f} seconds".format(n, elapsed))
     array = numpy.array(data.values())
 
+    x = data.keys()
+    x.sort()
+
     matplotlib.pyplot.plot(data.values())
     matplotlib.pyplot.xlabel('problem size in bytes')
-    matplotlib.pyplot.xticks(range(0, len(data.values())), data.keys())
+    matplotlib.pyplot.xticks(range(0, len(data.values())), x)
 
 # TODO: add problem size as labels in X axis
 
@@ -259,11 +263,21 @@ def main():
 
     matplotlib.pyplot.plot(procs)
     matplotlib.pyplot.xlabel('cores in units')
+    matplotlib.pyplot.xticks(range(0, int(cores)),
+                             range(1, int(cores) + 1))
     matplotlib.pyplot.ylabel('time in seconds')
     matplotlib.pyplot.title('thread count scaling')
     matplotlib.pyplot.savefig('procs.pdf', bbox_inches=0)
     matplotlib.pyplot.clf()
     LOG.debug("Plotted thread scaling")
+    
+    serial = (2 * procs[0] - procs[1])
+    parallel = (1 - 2 * procs[0] - procs[1])
+    macros['serial'] = "%.5f" % serial
+    macros['parallel'] = "%.5f" % parallel
+
+    macros['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
+    macros['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
 
     opts = []
     for o in range(0, 4):
