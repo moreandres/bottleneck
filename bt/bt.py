@@ -20,8 +20,6 @@ import socket
 import platform
 import pickle
 
-from pylint import epylint as lint
-
 TAG = {}
 
 class Logger:
@@ -46,8 +44,10 @@ class Logger:
         cwd = os.path.abspath('.')
         program = os.path.basename(cwd)
     
-        self.logger.timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.logger.logdir = '~/.bt/{0}-{1}'.format(program, self.logger.timestamp)
+        timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.logger.timestamp = timestamp
+        self.logger.logdir = '~/.bt/{0}-{1}'.format(program,
+                                                    self.logger.timestamp)
         if not os.path.exists(self.logger.logdir):
             os.makedirs(self.logger.logdir)
 
@@ -100,16 +100,8 @@ CFG = ConfigurationParser().load()
 
 # TODO: check design
 
-class Report:
-    """PDF generator."""
-    def __init__(self):
-        """Do nothing."""
-        pass
-    def program(self):
-        pass
-
 def main():
-
+    """The full Monty."""
     cwd = os.path.abspath('.')
     program = os.path.basename(cwd)
 
@@ -146,7 +138,8 @@ def main():
     try:
         hardware = pickle.load(open("hardware.cache", "rb"))
     except IOError:
-        command = 'lshw -short -sanitize | cut -b25- | grep -E "memory|processor|bridge|network|storage"'
+        grep = 'grep -E "memory|processor|bridge|network|storage"'
+        command = 'lshw -short -sanitize | cut -b25- | ' + grep
         hardware = subprocess.check_output(command, shell = True)
         pickle.dump(hardware, open("hardware.cache", "wb"))
 
@@ -213,8 +206,8 @@ def main():
         times.append(elapsed)
         LOG.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
     array = numpy.array(times)
-    LOG.debug("Deviation: gmean {0:.2f} std {1:.2f}".format(scipy.stats.gmean(array),
-                                                            numpy.std(array)))
+    deviation = "Deviation: gmean {0:.2f} std {1:.2f}"
+    LOG.debug(deviation.format(scipy.stats.gmean(array), numpy.std(array)))
 
     TAG['geomean'] = "%.5f" % scipy.stats.gmean(array)
     TAG['stddev'] = "%.5f" % numpy.std(array)
@@ -240,23 +233,23 @@ def main():
     LOG.debug("Plotted histogram")
 
     data = {}
-    for n in range(int(first), int(last) + 1, int(increment)):
+    for size in range(int(first), int(last) + 1, int(increment)):
         start = time.time()
-        subprocess.call(run.format(cores, n, program), shell = True)
+        subprocess.call(run.format(cores, size, program), shell = True)
         end = time.time()
         elapsed = end - start
-        data[n] = elapsed
-        LOG.debug("Problem at {0} took {1:.2f} seconds".format(n, elapsed))
+        data[size] = elapsed
+        LOG.debug("Problem at {0} took {1:.2f} seconds".format(size, elapsed))
     array = numpy.array(data.values())
 
 # TODO: kill execution if time takes more than a limit
 
-    x = data.keys()
-    x.sort()
+    xvalues = data.keys()
+    xvalues.sort()
 
     matplotlib.pyplot.plot(data.values())
     matplotlib.pyplot.xlabel('problem size in bytes')
-    matplotlib.pyplot.xticks(range(0, len(data.values())), x)
+    matplotlib.pyplot.xticks(range(0, len(data.values())), xvalues)
 
 # TODO: add problem size as labels in X axis
 
@@ -267,20 +260,20 @@ def main():
     LOG.debug("Plotted problem scaling")
 
     procs = []
-    for c in range(1, int(cores) + 1):
+    for core in range(1, int(cores) + 1):
         start = time.time()
-        subprocess.call(run.format(c, first, program), shell = True)
+        subprocess.call(run.format(core, first, program), shell = True)
         end = time.time()
         elapsed = end - start
         procs.append(elapsed)
-        LOG.debug("Threads at {0} took {1:.2f} seconds".format(c, elapsed))
+        LOG.debug("Threads at {0} took {1:.2f} seconds".format(core, elapsed))
     array = numpy.array(procs)
 
     matplotlib.pyplot.plot(procs)
 
     ideal = [ procs[0] ]
-    for p in range(1, len(procs)):
-        ideal.append(procs[p]/p+1)
+    for proc in range(1, len(procs)):
+        ideal.append(procs[proc]/proc+1)
 
     matplotlib.pyplot.plot(ideal)
 
@@ -302,15 +295,16 @@ def main():
     TAG['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
 
     opts = []
-    for o in range(0, 4):
+    for opt in range(0, 4):
         start = time.time()
-        command = ' && '.join([ build.format('-O{0}'.format(o)),
+        command = ' && '.join([ build.format('-O{0}'.format(opt)),
                                run.format(cores, first, program) ])
         subprocess.call(command, shell = True)
         end = time.time()
         elapsed = end - start
         opts.append(elapsed)
-        LOG.debug("Optimizations at {0} took {1:.2f} seconds".format(o, elapsed))
+        optimizations = "Optimizations at {0} took {1:.2f} seconds"
+        LOG.debug(optimizations.format(opt, elapsed))
     array = numpy.array(opts)
 
     matplotlib.pyplot.plot(opts)
@@ -323,9 +317,10 @@ def main():
     TAG['vectorizer'] = output
     LOG.debug("Vectorization report completed")
 
+    gprofgrep = 'gprof -l -b {0} | grep [a-zA-Z0-9]'
     command = ' && '.join([ build.format('"-O3 -g -pg"'),
-                           run.format(cores, first, program),
-                           'gprof -l -b {0} | grep [a-zA-Z0-9]'.format(program) ])
+                            run.format(cores, first, program),
+                            gprofgrep.format(program) ])
     output = subprocess.check_output(command, shell = True)
     TAG['profile'] = output
     LOG.debug("Profiling report completed")
@@ -337,23 +332,26 @@ def main():
                            environment + record,
                            annotate ])
     subprocess.check_call(command, shell = True)
-    output = subprocess.check_output('cat /tmp/test | grep -v "0.00"', shell = True)
+    cattest = 'cat /tmp/test | grep -v "0.00"'
+    output = subprocess.check_output(cattest, shell = True)
     TAG['annotation'] = output
     LOG.debug("Source annotation completed")
 
-    command = run.format(cores, first, program) + '& pidstat -r -d -u -h -p $! 1 | cut -b1-39,49-82,98-131'
+    pidstat = '& pidstat -r -d -u -h -p $! 1 | cut -b1-39,49-82,98-131'
+    command = run.format(cores, first, program) + pidstat
     output = subprocess.check_output(command, shell = True)
     TAG['resources'] = output
     LOG.debug("Resource usage tracking completed")
 
     template = open('/home/amore/tmp/bottleneck/bt/bt.tex', 'r').read()
-    for k, v in TAG.iteritems():
-        LOG.debug("Replacing macro {0} with {1}".format(k,v))
-        template = template.replace('@@' + k.upper() + '@@', v.replace('%',
-                                                                       '?'))
+    for key, value in TAG.iteritems():
+        LOG.debug("Replacing macro {0} with {1}".format(key, value))
+        template = template.replace('@@' + key.upper() + '@@',
+                                    value.replace('%', '?'))
     open(program + '.tex', 'w').write(template)
 
-    command = 'pdflatex {0}.tex && pdflatex {0}.tex && pdflatex {0}.tex'.format(program)
+    latex = 'pdflatex {0}.tex && pdflatex {0}.tex && pdflatex {0}.tex'
+    command = latex.format(program)
     subprocess.call(command, shell = True)
 
 if __name__ == "__main__":
