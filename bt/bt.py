@@ -18,8 +18,11 @@ import re
 import datetime
 import socket
 import platform
+import pickle
 
 from pylint import epylint as lint
+
+TAG = {}
 
 class Logger:
     """Enable logging."""
@@ -39,6 +42,14 @@ class Logger:
         consoleh.setFormatter(formatter)
         self.logger.addHandler(fileh)
         self.logger.addHandler(consoleh)
+
+        cwd = os.path.abspath('.')
+        program = os.path.basename(cwd)
+    
+        self.logger.timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.logger.logdir = '~/.bt/{0}-{1}'.format(program, self.logger.timestamp)
+        if not os.path.exists(self.logger.logdir):
+            os.makedirs(self.logger.logdir)
 
     def close(self):
         """Close logging."""
@@ -71,7 +82,7 @@ class ConfigurationParser:
                                               version='0.0.1')
         self.parser.add_argument('--config', '-c',
                                  help='path to configuration',
-                                 default='/home/amore/bt/bt.cfg')
+                                 default='/home/amore/tmp/bottleneck/bt/bt.cfg')
         LOG.debug('Parsing arguments')
         self.args = self.parser.parse_args()
         self.config = ConfigParser.ConfigParser()
@@ -87,110 +98,109 @@ class ConfigurationParser:
 
 CFG = ConfigurationParser().load()
 
-class Test:
-    """Test."""
+# TODO: check design
+
+class Report:
+    """PDF generator."""
     def __init__(self):
         """Do nothing."""
         pass
-
-    def test_matrix(self):
-        """Analyze matrix multiplication kernel."""
-        directory = 'matrix'
-        command = 'cd {0}; ../{1}'.format(directory, 'bt.py')
-        subprocess.check_call(command, shell = True)
-
-    def test_heat2d(self):
-        """Analyze heat 2D simulation kernel."""
-        directory = 'heat2d'
-        command = 'cd {0}; ../{1}'.format(directory, 'bt.py')
-        retcode = subprocess.call(command, shell = True)
-        assert retcode == 0
-
-    def test_mandel(self):
-        """Analyze mandelbrot set kernel."""
-        directory = 'mandel'
-        command = 'cd {0}; ../{1}'.format(directory, 'bt.py')
-        retcode = subprocess.call(command, shell = True)
-        assert retcode == 0
-    
-    def test_pylint(self):
-        """ Check source code using pylint. """
-
-        (stdout, stderr) = lint.py_run(__file__, True)
-        output = stdout.readlines()
-        error = stderr.readlines()
-        assert len(output) == 0, output
-        assert len(error) == 0, error
+    def program(self):
+        pass
 
 def main():
 
     cwd = os.path.abspath('.')
     program = os.path.basename(cwd)
 
-    timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-    logdir = '~/.bt/{0}-{1}'.format(program, timestamp)
-    if not os.path.exists(logdir):
-        os.makedirs(logdir)
+# program
 
-    macros = {}
+# system
 
-    macros['timestamp'] = timestamp
-    macros['log'] = logdir
+# baseline
 
-    macros['host'] = socket.getfqdn()
+# TODO: check if baseline results are valid
 
-    macros['distro'] = ', '.join(platform.linux_distribution())
-    macros['platform'] = platform.platform()
-    command = 'lshw -short -sanitize | cut -b25-'
-    macros['hardware'] = subprocess.check_output(command, shell = True)
+# workload
+
+# TODO: fix histogram
+# TODO: choose size to fit in 1 minute
+
+# scalability
+
+# profile
+
+# bottlenecks
+
+# vectorization
+
+# counters
+
+    TAG['timestamp'] = LOG.timestamp
+
+    TAG['log'] = LOG.logdir
+    TAG['host'] = socket.getfqdn()
+    TAG['distro'] = ', '.join(platform.linux_distribution())
+    TAG['platform'] = platform.platform()
+
+    try:
+        hardware = pickle.load(open("hardware.cache", "rb"))
+    except IOError:
+        command = 'lshw -short -sanitize | cut -b25- | grep -E "memory|processor|bridge|network|storage"'
+        hardware = subprocess.check_output(command, shell = True)
+        pickle.dump(hardware, open("hardware.cache", "wb"))
+
+    TAG['hardware'] = hardware
 
     command = 'gcc --version | head -n1'
-    macros['compiler'] = subprocess.check_output(command, shell = True).strip()
+    TAG['compiler'] = subprocess.check_output(command, shell = True).strip()
 
     command = '/lib/x86_64-linux-gnu/libc.so.6 | head -n1'
-    macros['libc'] = subprocess.check_output(command, shell = True).strip()
+    TAG['libc'] = subprocess.check_output(command, shell = True).strip()
 
-    macros['cwd'] = cwd
-    macros['program'] = program
+    TAG['cwd'] = cwd
+    TAG['program'] = program
 
     count = CFG.get('count')
     build = CFG.get('build')
     run = CFG.get('run')
     first, last, increment = CFG.get('range', program).split(',')
 
-    macros['range'] = str(range(int(first), int(last), int(increment)))
-
-# TBD: range here is max/min not problem range
+    TAG['range'] = str(range(int(first), int(last), int(increment)))
 
     cores = str(multiprocessing.cpu_count())
 
-    macros['count'] = count
-    macros['build'] = build
-    macros['run'] = run
-    macros['first'] = first
-    macros['last'] = last
-    macros['increment'] = increment
-    macros['cores'] = cores
+    TAG['count'] = count
+    TAG['build'] = build
+    TAG['run'] = run
+    TAG['first'] = first
+    TAG['last'] = last
+    TAG['increment'] = increment
+    TAG['cores'] = cores
 
     test = ' && '.join([ build.format('-O3'),
                         run.format(cores, first, program) ])
     subprocess.check_call(test, shell = True)
     LOG.debug("Sanity test returned status 0")
 
-    benchmark = 'mpirun `which hpcc` && cat hpccoutf.txt'
-    # output = subprocess.check_output(benchmark, shell = True)
-    # metrics = [ ('success', r'Success=(\d+.*)', None),
-    #             ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
-    #             ('dgemm', r'StarDGEMM_Gflops=(\d+.*)', 'GFlops'),
-    #             ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBss'),
-    #             ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPss'),
-    #             ('stream', r'StarSTREAM_Triad=(\d+.*)', 'MBs'),
-    #             ('fft', r'StarFFT_Gflops=(\d+.*)', 'GFlops'), ]
+    try:
+        output = pickle.load(open("benchmark.cache", "rb"))
+    except IOError:
+        benchmark = 'mpirun `which hpcc` && cat hpccoutf.txt'
+        output = subprocess.check_output(benchmark, shell = True)
+        pickle.dump(output, open("benchmark.cache", "wb"))
 
-    # for metric in metrics:
-    #     match = re.search(metric[1], output).group(1)
-    #     macros['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match,
-    #                                                             metric[2])
+    metrics = [ ('success', r'Success=(\d+.*)', None),
+                ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
+                ('dgemm', r'StarDGEMM_Gflops=(\d+.*)', 'GFlops'),
+                ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBss'),
+                ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPss'),
+                ('stream', r'StarSTREAM_Triad=(\d+.*)', 'MBs'),
+                ('fft', r'StarFFT_Gflops=(\d+.*)', 'GFlops'), ]
+
+    for metric in metrics:
+        match = re.search(metric[1], output).group(1)
+        TAG['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match, metric[2])
 
     LOG.debug("System baseline completed.")
 
@@ -206,8 +216,11 @@ def main():
     LOG.debug("Deviation: gmean {0:.2f} std {1:.2f}".format(scipy.stats.gmean(array),
                                                             numpy.std(array)))
 
-    macros['geomean'] = "%.5f" % scipy.stats.gmean(array)
-    macros['stddev'] = "%.5f" % numpy.std(array)
+    TAG['geomean'] = "%.5f" % scipy.stats.gmean(array)
+    TAG['stddev'] = "%.5f" % numpy.std(array)
+
+    TAG['max'] = "%.5f" % numpy.max(array)
+    TAG['min'] = "%.5f" % numpy.min(array)
 
     # min/max
 
@@ -236,6 +249,8 @@ def main():
         LOG.debug("Problem at {0} took {1:.2f} seconds".format(n, elapsed))
     array = numpy.array(data.values())
 
+# TODO: kill execution if time takes more than a limit
+
     x = data.keys()
     x.sort()
 
@@ -262,6 +277,13 @@ def main():
     array = numpy.array(procs)
 
     matplotlib.pyplot.plot(procs)
+
+    ideal = [ procs[0] ]
+    for p in range(1, len(procs)):
+        ideal.append(procs[p]/p+1)
+
+    matplotlib.pyplot.plot(ideal)
+
     matplotlib.pyplot.xlabel('cores in units')
     matplotlib.pyplot.xticks(range(0, int(cores)),
                              range(1, int(cores) + 1))
@@ -273,11 +295,11 @@ def main():
     
     serial = (2 * procs[0] - procs[1])
     parallel = (1 - 2 * procs[0] - procs[1])
-    macros['serial'] = "%.5f" % serial
-    macros['parallel'] = "%.5f" % parallel
+    TAG['serial'] = "%.5f" % serial
+    TAG['parallel'] = "%.5f" % parallel
 
-    macros['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
-    macros['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
+    TAG['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
+    TAG['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
 
     opts = []
     for o in range(0, 4):
@@ -298,14 +320,14 @@ def main():
 
     command = build.format('"-O3 -ftree-vectorizer-verbose=7"')
     output = subprocess.check_output(command, shell = True)
-    macros['vectorizer'] = output
+    TAG['vectorizer'] = output
     LOG.debug("Vectorization report completed")
 
     command = ' && '.join([ build.format('"-O3 -g -pg"'),
                            run.format(cores, first, program),
-                           'gprof -l -b {0}'.format(program) ])
+                           'gprof -l -b {0} | grep [a-zA-Z0-9]'.format(program) ])
     output = subprocess.check_output(command, shell = True)
-    macros['profile'] = output
+    TAG['profile'] = output
     LOG.debug("Profiling report completed")
     
     environment = run.format(cores, first, program).split('./')[0]
@@ -315,23 +337,23 @@ def main():
                            environment + record,
                            annotate ])
     subprocess.check_call(command, shell = True)
-    output = subprocess.check_output('cat /tmp/test', shell = True)
-    macros['annotation'] = output
+    output = subprocess.check_output('cat /tmp/test | grep -v "0.00"', shell = True)
+    TAG['annotation'] = output
     LOG.debug("Source annotation completed")
 
-    command = run.format(cores, first, program) + '& pidstat -r -d -u -h -p $! 1'
+    command = run.format(cores, first, program) + '& pidstat -r -d -u -h -p $! 1 | cut -b1-39,49-82,98-131'
     output = subprocess.check_output(command, shell = True)
-    macros['resources'] = output
+    TAG['resources'] = output
     LOG.debug("Resource usage tracking completed")
 
-    template = open('/home/amore/bt/bt.tex', 'r').read()
-    for k, v in macros.iteritems():
+    template = open('/home/amore/tmp/bottleneck/bt/bt.tex', 'r').read()
+    for k, v in TAG.iteritems():
         LOG.debug("Replacing macro {0} with {1}".format(k,v))
         template = template.replace('@@' + k.upper() + '@@', v.replace('%',
                                                                        '?'))
     open(program + '.tex', 'w').write(template)
 
-    command = 'pdflatex {0}.tex; pdflatex {0}.tex'.format(program)
+    command = 'pdflatex {0}.tex && pdflatex {0}.tex && pdflatex {0}.tex'.format(program)
     subprocess.call(command, shell = True)
 
 if __name__ == "__main__":
