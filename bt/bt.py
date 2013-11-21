@@ -19,6 +19,7 @@ import datetime
 import socket
 import platform
 import pickle
+import math
 
 TAG = {}
 
@@ -28,28 +29,33 @@ class Logger:
     def __init__(self, name):
         """Store all logs in file, show only errors in console."""
 
+        cwd = os.path.abspath('.')
+        program = os.path.basename(cwd)
+    
+        timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+
         self.logger = logging.getLogger(name)
+        self.logger.timestamp = timestamp
+        self.logger.logdir = '{0}/.bt/{1}/{2}'.format(os.path.expanduser("~"),
+                                                      program,
+                                                      self.logger.timestamp)
+        if not os.path.exists(self.logger.logdir):
+            os.makedirs(self.logger.logdir)
+
         self.logger.setLevel(logging.DEBUG)
-        fileh = logging.FileHandler(name + '.log')
+
+        fileh = logging.FileHandler(self.logger.logdir + '/full.log')
         fileh.setLevel(logging.DEBUG)
         consoleh = logging.StreamHandler()
         consoleh.setLevel(logging.DEBUG)
         fmt = '%(asctime)s: %(levelname)s: %(message)s'
         formatter = logging.Formatter(fmt, datefmt="%Y%m%d-%H%M%S")
+
         fileh.setFormatter(formatter)
         consoleh.setFormatter(formatter)
+
         self.logger.addHandler(fileh)
         self.logger.addHandler(consoleh)
-
-        cwd = os.path.abspath('.')
-        program = os.path.basename(cwd)
-    
-        timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.logger.timestamp = timestamp
-        self.logger.logdir = '~/.bt/{0}-{1}'.format(program,
-                                                    self.logger.timestamp)
-        if not os.path.exists(self.logger.logdir):
-            os.makedirs(self.logger.logdir)
 
     def close(self):
         """Close logging."""
@@ -58,7 +64,7 @@ class Logger:
         
     def get(self):
         """Get logger instance."""
-
+        self.logger.debug('Logging to {0}'.format(self.logger.logdir))
         return self.logger
 
 LOG = Logger('bt').get()
@@ -101,32 +107,12 @@ CFG = ConfigurationParser().load()
 # TODO: check design
 
 def main():
-    """The full Monty."""
+    """TBD: to be refactored."""
     cwd = os.path.abspath('.')
     program = os.path.basename(cwd)
 
-# program
-
-# system
-
-# baseline
-
 # TODO: check if baseline results are valid
-
-# workload
-
-# TODO: fix histogram
 # TODO: choose size to fit in 1 minute
-
-# scalability
-
-# profile
-
-# bottlenecks
-
-# vectorization
-
-# counters
 
     TAG['timestamp'] = LOG.timestamp
 
@@ -137,7 +123,9 @@ def main():
 
     try:
         hardware = pickle.load(open("hardware.cache", "rb"))
+        LOG.debug('Loading hardware.cache')
     except IOError:
+        LOG.debug('Dumping hardware.cache')
         grep = 'grep -E "memory|processor|bridge|network|storage"'
         command = 'lshw -short -sanitize | cut -b25- | ' + grep
         hardware = subprocess.check_output(command, shell = True)
@@ -163,6 +151,41 @@ def main():
 
     cores = str(multiprocessing.cpu_count())
 
+#
+    pidstat = '& pidstat -s -r -d -u -h -p $! 1 | sed "s| \+|,|g" | grep ^, | cut -b2-'
+    command = run.format(cores, last, program) + pidstat
+    output = subprocess.check_output(command, shell = True)
+
+    print output
+
+    lines = output.splitlines()
+    header = 'Time,PID,%usr,%system,%guest,%CPU,CPU,minflt/s,majflt/s,VSZ,RSS,%MEM,StkSize,StkRef,kB_rd/s,kB_wr/s,kB_ccwr/s,Command'
+    fields = header.split(',')
+
+    data = {}
+    for i in range(0, len(fields)):
+        field = fields[i]
+        if field in ['%CPU', '%MEM']:
+
+            # TODO: add disk read/writes
+
+            data[field] = []
+            for line in lines:
+                data[field].append(line.split(',')[i])
+
+            matplotlib.pyplot.plot(data[field])
+            matplotlib.pyplot.xlabel('{0} usage rate'.format(field))
+            matplotlib.pyplot.grid(True)  
+            matplotlib.pyplot.ylabel('percentage of available resources')
+            matplotlib.pyplot.title('resource usage')
+            matplotlib.pyplot.savefig('{0}.pdf'.format(field, bbox_inches=0).replace('%',''))
+            matplotlib.pyplot.clf()
+
+    TAG['resources'] = output
+    LOG.debug("Resource usage plotting completed")
+
+#
+
     TAG['count'] = count
     TAG['build'] = build
     TAG['run'] = run
@@ -173,12 +196,14 @@ def main():
 
     test = ' && '.join([ build.format('-O3'),
                         run.format(cores, first, program) ])
-    subprocess.check_call(test, shell = True)
+    output = subprocess.check_output(test, shell = True)
     LOG.debug("Sanity test returned status 0")
 
     try:
         output = pickle.load(open("benchmark.cache", "rb"))
+        LOG.debug('Loading benchmark.cache')
     except IOError:
+        LOG.debug('Dumping benchmark.cache')
         benchmark = 'mpirun `which hpcc` && cat hpccoutf.txt'
         output = subprocess.check_output(benchmark, shell = True)
         pickle.dump(output, open("benchmark.cache", "wb"))
@@ -186,16 +211,19 @@ def main():
     metrics = [ ('success', r'Success=(\d+.*)', None),
                 ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
                 ('dgemm', r'StarDGEMM_Gflops=(\d+.*)', 'GFlops'),
-                ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBss'),
-                ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPss'),
+                ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBs'),
+                ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPs'),
                 ('stream', r'StarSTREAM_Triad=(\d+.*)', 'MBs'),
                 ('fft', r'StarFFT_Gflops=(\d+.*)', 'GFlops'), ]
 
     for metric in metrics:
-        match = re.search(metric[1], output).group(1)
+        try:
+            match = re.search(metric[1], output).group(1)
+        except AttributeError:
+            match = 'Unknown'
         TAG['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match, metric[2])
 
-    LOG.debug("System baseline completed.")
+    LOG.debug("System baseline completed")
 
     times = []
     for i in range(0, int(count)):
@@ -218,7 +246,7 @@ def main():
     # min/max
 
     buckets, bins, patches = matplotlib.pyplot.hist(times,
-                                                    bins=16,
+                                                    bins=math.ceil(math.sqrt(int(count))),
                                                     normed=True)
     matplotlib.pyplot.plot(bins, 
                            scipy.stats.norm.pdf(bins,
@@ -228,6 +256,7 @@ def main():
     matplotlib.pyplot.xlabel('time in seconds')
     matplotlib.pyplot.ylabel('ocurrences in units')
     matplotlib.pyplot.title('histogram')
+    matplotlib.pyplot.grid(True)  
     matplotlib.pyplot.savefig('hist.pdf', bbox_inches=0)
     matplotlib.pyplot.clf()
     LOG.debug("Plotted histogram")
@@ -250,6 +279,7 @@ def main():
     matplotlib.pyplot.plot(data.values())
     matplotlib.pyplot.xlabel('problem size in bytes')
     matplotlib.pyplot.xticks(range(0, len(data.values())), xvalues)
+    matplotlib.pyplot.grid(True)  
 
 # TODO: add problem size as labels in X axis
 
@@ -269,13 +299,14 @@ def main():
         LOG.debug("Threads at {0} took {1:.2f} seconds".format(core, elapsed))
     array = numpy.array(procs)
 
-    matplotlib.pyplot.plot(procs)
+    matplotlib.pyplot.plot(procs, label="actual")
+    matplotlib.pyplot.grid(True)  
 
     ideal = [ procs[0] ]
     for proc in range(1, len(procs)):
         ideal.append(procs[proc]/proc+1)
 
-    matplotlib.pyplot.plot(ideal)
+    matplotlib.pyplot.plot(ideal, label="ideal")
 
     matplotlib.pyplot.xlabel('cores in units')
     matplotlib.pyplot.xticks(range(0, int(cores)),
@@ -283,16 +314,21 @@ def main():
     matplotlib.pyplot.ylabel('time in seconds')
     matplotlib.pyplot.title('thread count scaling')
     matplotlib.pyplot.savefig('procs.pdf', bbox_inches=0)
+    matplotlib.pyplot.grid(True)  
     matplotlib.pyplot.clf()
     LOG.debug("Plotted thread scaling")
-    
-    serial = (2 * procs[0] - procs[1])
-    parallel = (1 - 2 * procs[0] - procs[1])
+
+    # TODO: if procs[1] is less than half procs[0] then supralinear
+
+    parallel = 2 * (procs[0] - procs[1]) / procs[0]
+    serial = (procs[0] - 2 * (procs[0] - procs[1])) / procs[0]
     TAG['serial'] = "%.5f" % serial
     TAG['parallel'] = "%.5f" % parallel
 
     TAG['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
     TAG['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
+
+    LOG.debug("Computed scaling laws")
 
     opts = []
     for opt in range(0, 4):
@@ -331,20 +367,14 @@ def main():
     command = ' && '.join([ build.format('"-O3 -g"'),
                            environment + record,
                            annotate ])
-    subprocess.check_call(command, shell = True)
+    output = subprocess.check_output(command, shell = True)
     cattest = 'cat /tmp/test | grep -v "0.00"'
     output = subprocess.check_output(cattest, shell = True)
     TAG['annotation'] = output
     LOG.debug("Source annotation completed")
 
-    pidstat = '& pidstat -r -d -u -h -p $! 1 | cut -b1-39,49-82,98-131'
-    command = run.format(cores, first, program) + pidstat
-    output = subprocess.check_output(command, shell = True)
-    TAG['resources'] = output
-    LOG.debug("Resource usage tracking completed")
-
     template = open('/home/amore/tmp/bottleneck/bt/bt.tex', 'r').read()
-    for key, value in TAG.iteritems():
+    for key, value in sorted(TAG.iteritems()):
         LOG.debug("Replacing macro {0} with {1}".format(key, value))
         template = template.replace('@@' + key.upper() + '@@',
                                     value.replace('%', '?'))
