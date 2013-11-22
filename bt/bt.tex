@@ -17,45 +17,53 @@
 
 \begin{document}
 
-\title{Performance Report}
+\title{@@PROGRAM@@ Performance Report}
 
-\author{\tt more.andres@gmail.com}
+\date{@@TIMESTAMP@@}
 
 \maketitle
 
-\abstract{Report generated using {\tt bottleneck} version {\tt 0.1}. Please report issues to {\tt more.andres@gmail.com}. Full Log: {\tt @@CWD@@/.bt/@@TIMESTAMP@@/bt.log}. Homepage \href{http://www.github.com/amore/bottleneck}{http://www.github.com/amore/bottleneck}.}
+\abstract{This performance report is intended to support performance analysis and optimization activities. It includes details on program behavior, system configuration and capabilities, and relevant data from well-known performance analysis tools. This report was generated using {\tt bottleneck} version {\tt 0.1}. Homepage \url{http://www.github.com/amore/bottleneck}. Please report issues to \url{mailto:more.andres@gmail.com}. Full Log: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/bt.log}.}
 
 \tableofcontents
 
 \section{Program}
 
 This section provides details about the program being analyzed.
-It is used for results reference.
 
 \begin{enumerate}
 \item Program: {\tt @@PROGRAM@@}
 \item Timestamp: {\tt @@TIMESTAMP@@}
-\item Parameter Range: {\tt @@RANGE@@}
+\item Parameters Range: {\tt @@RANGE@@}
 \end{enumerate}
 
-More: {\tt @@CWD@@/.bt/@@TIMESTAMP@@/program.log}
+Program is the name of the program binary.
+Timestamp is a unique identifier used to store information on disk.
+Parameters Range is the problem size set used to scale the program. 
+
+More: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/program.log}
 
 \section{System Capabilities}
 
 This section provides details about the system being used for the analysis.
-It is used as a baseline and for comparison against other configurations.
 
 \subsection{System Configuration}
 
-This subsection provides details about the bill of materials of the system.
+This subsection provides details about the system configuration.
+
+The hardware in the system is summarized using a hardware lister utility.
+
+\begin{verbatim}
+@@HARDWARE@@
+\end{verbatim}
+
+The software in the system is summarized using the GNU/Linux platform.
 
 \begin{verbatim}
 @@PLATFORM@@
 \end{verbatim}
 
-\begin{verbatim}
-@@HARDWARE@@
-\end{verbatim}
+The software toolchain is also detailed.
 
 \begin{enumerate}
 \item Host: {\tt @@HOST@@}
@@ -64,17 +72,19 @@ This subsection provides details about the bill of materials of the system.
 \item C Library: {\tt @@LIBC@@}
 \end{enumerate}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/system.log}{@@CWD@@/.bt/@@TIMESTAMP@@/system.log}
+More: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/system.log}
 
 \subsection{System Performance Baseline}
 
-This subsection shows reference performance figures from well-known benchmarks.
+This subsection provides details about the system capabilities.
+
+A set of performance benchmark results is included as a reference.
 
 \begin{table}[H]
 \caption{Benchmarks}
   \centering
     \begin{tabular}{|l|l|l|}\hline
-      {\bf Benchmark} & {\bf Valor} & {\bf Unidad} \\ \hline
+      {\bf Benchmark} & {\bf Value} & {\bf Unit} \\ \hline
       hpl & @@HPCC-HPL@@ & tflops \\ \hline
       dgemm & @@HPCC-DGEMM@@ & mflops \\ \hline
       ptrans & @@HPCC-PTRANS@@ & MB/s \\ \hline
@@ -85,7 +95,7 @@ This subsection shows reference performance figures from well-known benchmarks.
  \label{table:pruebas}
 \end{table}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/benchmark.log}{@@CWD@@/.bt/@@TIMESTAMP@@/benchmark.log}
+More: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/benchmark.log}
 
 \section{Workload}
 
@@ -113,11 +123,13 @@ This section provides details about the workload behavior.
 
 \end{enumerate}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/histograph.log}{@@CWD@@/.bt/@@TIMESTAMP@@/histograph.log}
+More: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/histograph.log}
 
 \section{Scalability}
 
 This section provides details about the scaling behavior of the program.
+
+A chart with the execution time when scaling the problem size.
 
 \begin{figure}[H]
 \label{fig:scaling}
@@ -126,6 +138,8 @@ This section provides details about the scaling behavior of the program.
 \caption{Problem size times}
 \end{figure}
 
+A chart with the execution time when scaling computation units.
+
 \begin{figure}[H]
 \label{fig:normal}
 \centering
@@ -133,14 +147,21 @@ This section provides details about the scaling behavior of the program.
 \caption{Thread count times}
 \end{figure}
 
+The parallel and serial fractions of the program can be estimated.
+
 \begin{enumerate}
 \item Parallel Fraction: {\tt @@PARALLEL@@}
 \item Serial: {\tt @@SERIAL@@}
-\item Amdalah for 1024 procs: {\tt @@AMDALAH@@ times}
-\item Gustafson for 1024 procs: {\tt @@GUSTAFSON@@ times}
 \end{enumerate}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}
+Optimization limits can be estimated using scaling laws.
+
+\begin{enumerate}
+\item Amdalah Law for 1024 procs: {\tt @@AMDALAH@@ times}
+\item Gustafson Law for 1024 procs: {\tt @@GUSTAFSON@@ times}
+\end{enumerate}
+
+More: \url{run:@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}
 
 \section{Profile}
 
@@ -156,7 +177,7 @@ This subsection provides details about the program execution profile.
 92.6% main -> fft -> _fft -> _muldc3
 \end{verbatim}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/callgraph.log}{@@CWD@@/.bt/@@TIMESTAMP@@/callgraph.log}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/callgraph.log}
 
 \subsubsection{Flat Profile}
 
@@ -164,7 +185,7 @@ More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/callgraph.log}{@@CWD@@/.bt/@@TIMESTAMP@@/c
 @@PROFILE@@
 \end{verbatim}
 
-More: \href{TBD}{\tt @@LOG@@}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/profile.log}
 
 Overhead: {\tt @@OVERHEAD@@\%}
 
@@ -178,9 +199,9 @@ This subsection provide details about the system execution profile.
 @@ANNOTATION@@
 \end{verbatim}
 
-Overhead: {\tt 15\%}
+Overhead: {\tt @@OVERHEAD@@\%}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@/bottleneck.log}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/bottleneck.log}
 
 \subsubsection{System Resources Usage}
 
@@ -198,7 +219,7 @@ More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@
 \caption{Memory Usage}
 \end{figure}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@/resources.log}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/resources.log}
 
 \section{Low Level}
 
@@ -212,7 +233,7 @@ This subsection provide details about vectorization status of the program loops.
 @@VECTORIZER@@
 \end{verbatim}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@/vectorization.log}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/vectorization.log}
 
 \subsection{Counters Report}
 
@@ -227,6 +248,6 @@ This subsection provides details about software and hardware counters.
 123 branch-misses
 \end{verbatim}
 
-More: \href{@@CWD@@/.bt/@@TIMESTAMP@@/scalability.log}{@@CWD@@/.bt/@@TIMESTAMP@@/counters.log}
+More: \url{@@CWD@@/.bt/@@TIMESTAMP@@/counters.log}
 
 \end{document}

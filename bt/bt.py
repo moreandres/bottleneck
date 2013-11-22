@@ -39,6 +39,7 @@ class Logger:
         self.logger.logdir = '{0}/.bt/{1}/{2}'.format(os.path.expanduser("~"),
                                                       program,
                                                       self.logger.timestamp)
+
         if not os.path.exists(self.logger.logdir):
             os.makedirs(self.logger.logdir)
 
@@ -67,7 +68,9 @@ class Logger:
         self.logger.debug('Logging to {0}'.format(self.logger.logdir))
         return self.logger
 
-LOG = Logger('bt').get()
+LOGGER = Logger('bt')
+LOG = LOGGER.get()
+LOGDIR = LOGGER.logger.logdir
 
 class ConfigurationParser:
     """ Parse configuration."""
@@ -131,6 +134,8 @@ def main():
         hardware = subprocess.check_output(command, shell = True)
         pickle.dump(hardware, open("hardware.cache", "wb"))
 
+    pickle.dump(hardware, open(LOGDIR + "/hardware.log", "wb"))
+
     TAG['hardware'] = hardware
 
     command = 'gcc --version | head -n1'
@@ -156,7 +161,7 @@ def main():
     command = run.format(cores, last, program) + pidstat
     output = subprocess.check_output(command, shell = True)
 
-    print output
+    pickle.dump(output, open(LOGDIR + "/resources.log", "wb"))
 
     lines = output.splitlines()
     header = 'Time,PID,%usr,%system,%guest,%CPU,CPU,minflt/s,majflt/s,VSZ,RSS,%MEM,StkSize,StkRef,kB_rd/s,kB_wr/s,kB_ccwr/s,Command'
@@ -197,7 +202,9 @@ def main():
     test = ' && '.join([ build.format('-O3'),
                         run.format(cores, first, program) ])
     output = subprocess.check_output(test, shell = True)
-    LOG.debug("Sanity test returned status 0")
+    LOG.debug("Sanity test successful")
+
+    pickle.dump(output, open(LOGDIR + "/sanity.log", "wb"))
 
     try:
         output = pickle.load(open("benchmark.cache", "rb"))
@@ -207,6 +214,8 @@ def main():
         benchmark = 'mpirun `which hpcc` && cat hpccoutf.txt'
         output = subprocess.check_output(benchmark, shell = True)
         pickle.dump(output, open("benchmark.cache", "wb"))
+
+    pickle.dump(output, open(LOGDIR + "/benchmarks.log", "wb"))
 
     metrics = [ ('success', r'Success=(\d+.*)', None),
                 ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
@@ -225,13 +234,15 @@ def main():
 
     LOG.debug("System baseline completed")
 
+    outputs = []
     times = []
     for i in range(0, int(count)):
         start = time.time()
-        subprocess.call(run.format(cores, first, program), shell = True)
+        output = subprocess.check_output(run.format(cores, first, program), shell = True)
         end = time.time()
         elapsed = end - start
         times.append(elapsed)
+        outputs.append(output)
         LOG.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
     array = numpy.array(times)
     deviation = "Deviation: gmean {0:.2f} std {1:.2f}"
@@ -242,6 +253,8 @@ def main():
 
     TAG['max'] = "%.5f" % numpy.max(array)
     TAG['min'] = "%.5f" % numpy.min(array)
+
+    pickle.dump(outputs, open(LOGDIR + "/workload.log", "wb"))
 
     # min/max
 
@@ -261,11 +274,17 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted histogram")
 
+# TODO: detect/report outliers
+
+# TODO: historical comparison
+
     data = {}
+    outputs = []
     for size in range(int(first), int(last) + 1, int(increment)):
         start = time.time()
-        subprocess.call(run.format(cores, size, program), shell = True)
+        output = subprocess.check_output(run.format(cores, size, program), shell = True)
         end = time.time()
+        outputs.append(output)
         elapsed = end - start
         data[size] = elapsed
         LOG.debug("Problem at {0} took {1:.2f} seconds".format(size, elapsed))
@@ -289,11 +308,15 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted problem scaling")
 
+    pickle.dump(outputs, open(LOGDIR + "/size.log", "wb"))
+
+    outputs = []
     procs = []
     for core in range(1, int(cores) + 1):
         start = time.time()
-        subprocess.call(run.format(core, first, program), shell = True)
+        output = subprocess.check_output(run.format(core, last, program), shell = True)
         end = time.time()
+        outputs.append(output)
         elapsed = end - start
         procs.append(elapsed)
         LOG.debug("Threads at {0} took {1:.2f} seconds".format(core, elapsed))
@@ -318,7 +341,9 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted thread scaling")
 
-    # TODO: if procs[1] is less than half procs[0] then supralinear
+    pickle.dump(outputs, open(LOGDIR + "/threads.log", "wb"))
+
+    # TODO: if procs[1] is less than half procs[0] then supralinear then formula does not work
 
     parallel = 2 * (procs[0] - procs[1]) / procs[0]
     serial = (procs[0] - 2 * (procs[0] - procs[1])) / procs[0]
@@ -330,13 +355,15 @@ def main():
 
     LOG.debug("Computed scaling laws")
 
+    outputs = []
     opts = []
     for opt in range(0, 4):
         start = time.time()
         command = ' && '.join([ build.format('-O{0}'.format(opt)),
                                run.format(cores, first, program) ])
-        subprocess.call(command, shell = True)
+        output = subprocess.check_output(command, shell = True)
         end = time.time()
+        outputs.append(output)
         elapsed = end - start
         opts.append(elapsed)
         optimizations = "Optimizations at {0} took {1:.2f} seconds"
@@ -348,7 +375,11 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted optimizations")
 
-    command = build.format('"-O3 -ftree-vectorizer-verbose=7"')
+    pickle.dump(outputs, open(LOGDIR + "/opts.log", "wb"))
+
+# TODO: make all interesting commands to log into timestamp folder
+
+    command = build.format('"-O3 -ftree-vectorizer-verbose=7" 2>&1')
     output = subprocess.check_output(command, shell = True)
     TAG['vectorizer'] = output
     LOG.debug("Vectorization report completed")
