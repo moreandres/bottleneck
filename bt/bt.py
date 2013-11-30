@@ -21,14 +21,18 @@ import platform
 import pickle
 import math
 
+# Tokens to be replaced at the report are kept here."""
 TAG = {}
 
 class Logger:
     """Enable logging."""
 
     def __init__(self, name):
-        """Store all logs in file, show only errors in console."""
+        """Store all logs in file, show also in console."""
 
+# TODO: cli option to select log level in console
+
+        # logs are hidden in ~/.bt/PROGRAM/TIMESTAMP
         cwd = os.path.abspath('.')
         program = os.path.basename(cwd)
     
@@ -109,6 +113,8 @@ CFG = ConfigurationParser().load()
 
 # TODO: check design
 
+# TODO: refactor into sections
+
 def main():
     """TBD: to be refactored."""
     cwd = os.path.abspath('.')
@@ -116,6 +122,8 @@ def main():
 
 # TODO: check if baseline results are valid
 # TODO: choose size to fit in 1 minute
+
+# TODO: cli option to not do any smart thing like choosing problem size
 
     TAG['timestamp'] = LOG.timestamp
 
@@ -134,7 +142,8 @@ def main():
         hardware = subprocess.check_output(command, shell = True)
         pickle.dump(hardware, open("hardware.cache", "wb"))
 
-    pickle.dump(hardware, open(LOGDIR + "/hardware.log", "wb"))
+    with open(LOGDIR + '/hardware.log', 'w') as log:
+        log.write(hardware)
 
     TAG['hardware'] = hardware
 
@@ -156,14 +165,19 @@ def main():
 
     cores = str(multiprocessing.cpu_count())
 
-#
+# TODO: get human readable output, then process using Python
+
     pidstat = '& pidstat -s -r -d -u -h -p $! 1 | sed "s| \+|,|g" | grep ^, | cut -b2-'
     command = run.format(cores, last, program) + pidstat
     output = subprocess.check_output(command, shell = True)
 
-    pickle.dump(output, open(LOGDIR + "/resources.log", "wb"))
+    with open(LOGDIR + '/resources.log', 'w') as log:
+        log.write(output)
 
     lines = output.splitlines()
+
+# TODO: this should be parsed from output's header
+
     header = 'Time,PID,%usr,%system,%guest,%CPU,CPU,minflt/s,majflt/s,VSZ,RSS,%MEM,StkSize,StkRef,kB_rd/s,kB_wr/s,kB_ccwr/s,Command'
     fields = header.split(',')
 
@@ -172,7 +186,7 @@ def main():
         field = fields[i]
         if field in ['%CPU', '%MEM']:
 
-            # TODO: add disk read/writes
+            # TODO: add disk read/writes plots
 
             data[field] = []
             for line in lines:
@@ -204,7 +218,8 @@ def main():
     output = subprocess.check_output(test, shell = True)
     LOG.debug("Sanity test successful")
 
-    pickle.dump(output, open(LOGDIR + "/sanity.log", "wb"))
+    with open(LOGDIR + '/sanity.log', 'w') as log:
+        log.write(output)
 
     try:
         output = pickle.load(open("benchmark.cache", "rb"))
@@ -215,7 +230,8 @@ def main():
         output = subprocess.check_output(benchmark, shell = True)
         pickle.dump(output, open("benchmark.cache", "wb"))
 
-    pickle.dump(output, open(LOGDIR + "/benchmarks.log", "wb"))
+    with open(LOGDIR + '/benchmarks.log', 'w') as log:
+        log.write(output)
 
     metrics = [ ('success', r'Success=(\d+.*)', None),
                 ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
@@ -254,7 +270,10 @@ def main():
     TAG['max'] = "%.5f" % numpy.max(array)
     TAG['min'] = "%.5f" % numpy.min(array)
 
-    pickle.dump(outputs, open(LOGDIR + "/workload.log", "wb"))
+# TODO: append? instead of sending list
+
+    with open(LOGDIR + '/workload.log', 'w') as log:
+        log.write("\n".join(outputs))
 
     # min/max
 
@@ -308,7 +327,8 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted problem scaling")
 
-    pickle.dump(outputs, open(LOGDIR + "/size.log", "wb"))
+    with open(LOGDIR + '/size.log', 'w') as log:
+        log.write("\n".join(outputs))
 
     outputs = []
     procs = []
@@ -341,9 +361,10 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted thread scaling")
 
-    pickle.dump(outputs, open(LOGDIR + "/threads.log", "wb"))
+    with open(LOGDIR + '/threads.log', 'w') as log:
+        log.write("\n".join(outputs))
 
-    # TODO: if procs[1] is less than half procs[0] then supralinear then formula does not work
+    # TODO: procs[1] less than half procs[0] then supralinear then FAIL
 
     parallel = 2 * (procs[0] - procs[1]) / procs[0]
     serial = (procs[0] - 2 * (procs[0] - procs[1])) / procs[0]
@@ -375,7 +396,8 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted optimizations")
 
-    pickle.dump(outputs, open(LOGDIR + "/opts.log", "wb"))
+    with open(LOGDIR + '/opts.log', 'w') as log:
+        log.write("\n".join(outputs))
 
 # TODO: make all interesting commands to log into timestamp folder
 
@@ -389,6 +411,10 @@ def main():
                             run.format(cores, first, program),
                             gprofgrep.format(program) ])
     output = subprocess.check_output(command, shell = True)
+
+    with open(LOGDIR + '/vectorization.log', 'w') as log:
+        log.write(output)
+
     TAG['profile'] = output
     LOG.debug("Profiling report completed")
     
@@ -399,10 +425,23 @@ def main():
                            environment + record,
                            annotate ])
     output = subprocess.check_output(command, shell = True)
-    cattest = 'cat /tmp/test | grep -v "0.00"'
+    cattest = 'cat /tmp/test | grep -v "^\s*:\s*$" | grep -v "0.00"'
     output = subprocess.check_output(cattest, shell = True)
+
+    with open(LOGDIR + '/annotation.log', 'w') as log:
+        log.write(output)
+
     TAG['annotation'] = output
     LOG.debug("Source annotation completed")
+
+    counters = 'N={0} perf stat -r 3 ./{1}'.format(last, program)
+    output = subprocess.check_output(command, shell = True)
+    TAG['counters'] = output
+
+    with open(LOGDIR + '/counters.log', 'w') as log:
+        log.write(output)
+
+    LOG.debug("Hardware counters gathering completed")
 
     template = open('/home/amore/tmp/bottleneck/bt/bt.tex', 'r').read()
     for key, value in sorted(TAG.iteritems()):
