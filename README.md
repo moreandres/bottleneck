@@ -1,12 +1,10 @@
 bottleneck
-==========
 
-bottleneck is a performance report generator for OpenMP programs in GNU/Linux.
+a performance report generator for OpenMP programs in GNU/Linux.
 
 To install:
 
-$ sudo apt-get install texlive openmpi-bin linux-tools hpcc gcc gfortran
-$ pip install bottleneck
+$ sudo apt-get install texlive openmpi-bin linux-tools hpcc gcc gfortran $ pip install bottleneck
 
 To use:
 
