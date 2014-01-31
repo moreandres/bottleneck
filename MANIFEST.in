@@ -1,0 +1,3 @@
+include README LICENSE
+recursive-include bottleneck *
+recursive-include cfg *
