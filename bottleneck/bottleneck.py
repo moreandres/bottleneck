@@ -124,18 +124,18 @@ class Section:
         """Run command keeping logs and caching output."""
         cache = self.name + ".cache"
         output = None
-        print '{0} {1} {2}'.format(time.time(), os.path.getmtime(cache), self.cache)
-        if time.time() - os.path.getmtime(cache) <= self.cache:
+
+        if os.path.exists(cache) and time.time() - os.path.getmtime(cache) <= self.cache:
             try:
                 output = pickle.load(open(cache, "rb"))
                 LOG.debug('Loading ' + cache)
             except IOError:
                 LOG.debug('Dumping ' + cache)
-                output = subprocess.check_output(command, shell = True)
+                output = subprocess.check_output(command, shell = True).strip()
                 pickle.dump(output, open(cache, "wb"))
         else:
             LOG.debug('Running ' + cache)
-            output = subprocess.check_output(command, shell = True)
+            output = subprocess.check_output(command, shell = True).strip()
 
         with open(LOGDIR + '/' + self.name + '.log', 'w') as log:
             log.write(output)
@@ -189,14 +189,7 @@ class HardwareSection(Section):
 
         ls = 'lshw -short -sanitize | cut -b25- | '
         grep = 'grep -E "memory|processor|bridge|network|storage"'
-        self.run(ls + grep)
-        hardware = self.output
-        pickle.dump(hardware, open("hardware.cache", "wb"))
-
-        with open(LOGDIR + '/hardware.log', 'w') as log:
-            log.write(hardware)
-
-        self.tags['hardware'] = hardware
+        self.tags['hardware'] = self.run(ls + grep).output
 
         return self
 
@@ -223,11 +216,31 @@ class SoftwareSection(Section):
         LOG.debug('Creating program section')
         Section.__init__(self, 'software')        
     def gather(self):
-        command = 'gcc --version | head -n1'
-        self.tags['compiler'] = subprocess.check_output(command, shell = True).strip()
-        command = '/lib/x86_64-linux-gnu/libc.so.6 | head -n1'
-        self.tags['libc'] = subprocess.check_output(command, shell = True).strip()
 
+        # gcc (Ubuntu/Linaro 4.7.3-1ubuntu1) 4.7.3
+        # Copyright (C) 2012 Free Software Foundation, Inc.
+
+        compiler = 'gcc --version'
+        self.tags['compiler'] = re.split('\n', self.run(compiler).output)[0]
+
+        # GNU C Library (Ubuntu EGLIBC 2.17-0ubuntu5.1) stable release version 2.17, by Roland McGrath et al.
+        # Copyright (C) 2012 Free Software Foundation, Inc.
+
+        libc = '/lib/x86_64-linux-gnu/libc.so.6'
+        self.tags['libc'] = re.split('\n', self.run(libc).output)[0]
+
+        return self
+
+class SanitySection(Section):
+    def __init__(self):
+        LOG.debug('Creating program section')
+        Section.__init__(self, 'sanity')
+    def run(self):
+        test = ' && '.join([ self.tags['build'].format('-O3'),
+                             run.format(self.tags['cores'],
+                                        self.tags['first'],
+                                        self.tags['program']) ])
+        self.run(test)
         return self
 
 class BenchmarkSection(Section):
@@ -294,6 +307,7 @@ def main():
 
     cores = str(multiprocessing.cpu_count())
 
+
 # TODO: get/log human readable output, then process using Python
 
     pidstat = '& pidstat -s -r -d -u -h -p $! 1 | sed "s| \+|,|g" | grep ^, | cut -b2-'
@@ -333,22 +347,6 @@ def main():
     LOG.debug("Resource usage plotting completed")
 
 #
-
-    TAG['count'] = count
-    TAG['build'] = build
-    TAG['run'] = run
-    TAG['first'] = first
-    TAG['last'] = last
-    TAG['increment'] = increment
-    TAG['cores'] = cores
-
-    test = ' && '.join([ build.format('-O3'),
-                        run.format(cores, first, program) ])
-    output = subprocess.check_output(test, shell = True)
-    LOG.debug("Sanity test successful")
-
-    with open(LOGDIR + '/sanity.log', 'w') as log:
-        log.write(output)
 
 #
 

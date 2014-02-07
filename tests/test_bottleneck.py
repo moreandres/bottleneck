@@ -50,11 +50,19 @@ class TestProgramSection(unittest.TestCase):
 
 class TestSoftwareSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.SoftwareSection(), 'could not init SoftwareSection'
     def test_gather(self):
-        pass
+        assert bt.SoftwareSection().gather(), 'could not gather SoftwareSection'
     def test_get(self):
-        pass
+        assert bt.SoftwareSection().gather().get()['compiler'], 'could not get SoftwareSection'
+
+class TestSanitySection(unittest.TestCase):
+    def test_init(self):
+        assert bt.SanitySection(), 'could not init SanitySection'
+    def test_gather(self):
+        assert bt.SanitySection().gather(), 'could not gather SanitySection'
+    def test_get(self):
+        assert bt.SanitySection().gather().get(), 'could not get SanitySection'
 
 class TestBenchmarkSection(unittest.TestCase):
     def test_init(self):
