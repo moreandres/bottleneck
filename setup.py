@@ -3,13 +3,15 @@
 import os
 from setuptools import setup
 
+readme = os.path.join(os.path.dirname(__file__), 'README.md')
+
 setup(name = 'bottleneck',
       version = '0.1.0',
       description = 'performance report generator for OpenMP programs in GNU/Linux',
-      long_description = open(os.path.join(os.path.dirname(__file__), 'README')).read(),
+      long_description = open(readme).read(),
       author = 'Andres More',
       author_email='more.andres@gmail.com',
-      url='https://github.com/moreandres/bt',
+      url='https://github.com/moreandres/bottleneck.git',
       packages= [ 'bottleneck' ],
       entry_points = { 'console_scripts': [ 'bt = bottleneck:main' ] },
       data_files = [ ( 'config', [ 'cfg/bt.cfg', 'cfg/bt.tex' ] ) ],
@@ -27,6 +29,7 @@ setup(name = 'bottleneck',
         'Topic :: System :: Benchmark',
         'Topic :: Utilities',
         ],
+      test_suite = 'tests',
       include_package_data = True,
-      test_suite='tests',
+      install_requires=[ 'numpy', 'scipy', 'matplotlib' ],
       )

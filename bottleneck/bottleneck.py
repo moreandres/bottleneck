@@ -6,20 +6,21 @@ Bottleneck - Performance report generator.
 
 import ConfigParser
 import argparse
-import logging
-import os
-import subprocess
-import numpy
-import scipy.stats
-import time
-import multiprocessing
-import matplotlib.pyplot
-import re
 import datetime
-import socket
-import platform
-import pickle
+import logging
 import math
+import matplotlib.pyplot
+import multiprocessing
+import numpy
+import os
+import pickle
+import platform
+import pprint
+import re
+import scipy.stats
+import socket
+import subprocess
+import time
 
 # Tokens to be replaced at the report are kept here."""
 TAG = {}
@@ -110,23 +111,46 @@ class ConfigurationParser:
         LOG.debug('Getting {0} from config: {1}'.format(key, value))
         return value
 
-CFG = ConfigurationParser().load()
-
-# TODO: check design
+CFG = None # ConfigurationParser().load()
 
 class Section:
-    def __init__(self, name, tags = {}):
+    def __init__(self, name, tags = {}, cache = 0):
         """Store section name and context tags."""
         self.name = name
         self.tags = tags
+        self.cache = cache
         LOG.debug('Creating section named {0}'.format(self.name))
-    def run(self):
+    def run(self, command):
+        """Run command keeping logs and caching output."""
+        cache = self.name + ".cache"
+        output = None
+        print '{0} {1} {2}'.format(time.time(), os.path.getmtime(cache), self.cache)
+        if time.time() - os.path.getmtime(cache) <= self.cache:
+            try:
+                output = pickle.load(open(cache, "rb"))
+                LOG.debug('Loading ' + cache)
+            except IOError:
+                LOG.debug('Dumping ' + cache)
+                output = subprocess.check_output(command, shell = True)
+                pickle.dump(output, open(cache, "wb"))
+        else:
+            LOG.debug('Running ' + cache)
+            output = subprocess.check_output(command, shell = True)
+
+        with open(LOGDIR + '/' + self.name + '.log', 'w') as log:
+            log.write(output)
+
+        self.output = output
+
+        return self
+
+    def gather(self):
         """Populate section contents."""
-        LOG.debug('Running empty section named {0}'.format(self.name))
+        LOG.debug('Empty gather in section named {0}'.format(self.name))
         return self
     def get(self):
         """Return tags."""
-        LOG.debug('Passing tags from section named {0}'.format(self.name))
+        LOG.debug('Returning tags from section named {0}'.format(self.name))
         return self.tags
     def show(self):
         """Show section name and tags in console."""
@@ -134,95 +158,132 @@ class Section:
         for key, value in sorted(self.tags.iteritems()):
             LOG.debug('Tag {0} is {1}'.format(key, value))
         return self
-    def __repr__(self):
-        pass
-    def __str__(self):
-        pass
 
 class HardwareSection(Section):
     def __init__(self):
-        """Create Hardware Section."""
+        """Create hardware section."""
         LOG.debug('Creating hardware section')
-        Section.__init__(self, 'hardware')
-    def run(self):
-        self.tags['TEST'] = 'test'
+        Section.__init__(self, 'hardware', cache=86400)
+    def gather(self):
+        """Gather hardware information."""
+
+        # WARNING: you should run this program as super-user.
+        # H/W path    Device      Class      Description
+        # ==============================================
+        #                         system     Computer
+        # /0                      bus        Motherboard
+        # /0/0                    memory     994MiB System memory
+        # /0/1                    processor  Intel(R) Core(TM) i5-3320M CPU @ 2.60GHz
+        # /0/100                  bridge     440FX - 82441FX PMC [Natoma]
+        # /0/100/1                bridge     82371SB PIIX3 ISA [Natoma/Triton II]
+        # /0/100/1.1              storage    82371AB/EB/MB PIIX4 IDE
+        # /0/100/2                display    VirtualBox Graphics Adapter
+        # /0/100/3    eth0        network    82540EM Gigabit Ethernet Controller
+        # /0/100/4                generic    VirtualBox Guest Service
+        # /0/100/6                bus        KeyLargo/Intrepid USB
+        # /0/100/7                bridge     82371AB/EB/MB PIIX4 ACPI
+        # /0/100/d                storage    82801HM/HEM (ICH8M/ICH8M-E) SATA Controller
+        # /0/2        scsi1       storage
+        # /0/2/0.0.0  /dev/cdrom  disk       DVD reader
+        # WARNING: output may be incomplete or inaccurate, you should run this program as super-user.
+
+        ls = 'lshw -short -sanitize | cut -b25- | '
+        grep = 'grep -E "memory|processor|bridge|network|storage"'
+        self.run(ls + grep)
+        hardware = self.output
+        pickle.dump(hardware, open("hardware.cache", "wb"))
+
+        with open(LOGDIR + '/hardware.log', 'w') as log:
+            log.write(hardware)
+
+        self.tags['hardware'] = hardware
+
         return self
 
-# class ProgramSection(Section):
-# class SoftwareSection(Section):
-# class BenchmarkSection(Section):
-# class WorkloadSection(Section):
-# class ScalabilitySection(Section):
-# class ProfileSection(Section):
-# class ResourcesSection(Section):
-# class VectorizationSection(Section):
-# class CountersSection(Section):
+class ProgramSection(Section):
+    def __init__(self):
+        """Create program section."""
+        LOG.debug('Creating program section')
+        Section.__init__(self, 'program')
+    def gather(self):
+        """Gather program information."""
+        self.tags['timestamp'] = LOG.timestamp
+        self.tags['log'] = LOG.logdir
+        self.tags['host'] = socket.getfqdn()
+        self.tags['distro'] = ', '.join(platform.linux_distribution())
+        self.tags['platform'] = platform.platform()
+        self.tags['cwd'] = os.path.abspath('.')
+        self.tags['program'] = os.path.basename(self.tags['cwd'])
 
-# TODO: refactor into sections
+        return self
+
+class SoftwareSection(Section):
+    def __init__(self):
+        """Create program section."""
+        LOG.debug('Creating program section')
+        Section.__init__(self, 'software')        
+    def gather(self):
+        command = 'gcc --version | head -n1'
+        self.tags['compiler'] = subprocess.check_output(command, shell = True).strip()
+        command = '/lib/x86_64-linux-gnu/libc.so.6 | head -n1'
+        self.tags['libc'] = subprocess.check_output(command, shell = True).strip()
+
+        return self
+
+class BenchmarkSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class WorkloadSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class ScalabilitySection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class ProfileSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class ResourcesSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class VectorizationSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
+
+class CountersSection(Section):
+    def __init__(self):
+        pass
+    def run(self):
+        pass
 
 def main():
 
-    HardwareSection().run().show().get()
+    CFG = ConfigurationParser().load()
 
-    """TBD: to be refactored."""
-    cwd = os.path.abspath('.')
-    program = os.path.basename(cwd)
+    HardwareSection().gather().show().get()
 
 # TODO: check if baseline results are valid
 # TODO: choose size to fit in 1 minute
-
 # TODO: cli option to not do any smart thing like choosing problem size
 
-    TAG['timestamp'] = LOG.timestamp
-
-    TAG['log'] = LOG.logdir
-    TAG['host'] = socket.getfqdn()
-    TAG['distro'] = ', '.join(platform.linux_distribution())
-    TAG['platform'] = platform.platform()
-
-# WARNING: you should run this program as super-user.
-# H/W path    Device      Class      Description
-# ==============================================
-#                         system     Computer
-# /0                      bus        Motherboard
-# /0/0                    memory     994MiB System memory
-# /0/1                    processor  Intel(R) Core(TM) i5-3320M CPU @ 2.60GHz
-# /0/100                  bridge     440FX - 82441FX PMC [Natoma]
-# /0/100/1                bridge     82371SB PIIX3 ISA [Natoma/Triton II]
-# /0/100/1.1              storage    82371AB/EB/MB PIIX4 IDE
-# /0/100/2                display    VirtualBox Graphics Adapter
-# /0/100/3    eth0        network    82540EM Gigabit Ethernet Controller
-# /0/100/4                generic    VirtualBox Guest Service
-# /0/100/6                bus        KeyLargo/Intrepid USB
-# /0/100/7                bridge     82371AB/EB/MB PIIX4 ACPI
-# /0/100/d                storage    82801HM/HEM (ICH8M/ICH8M-E) SATA Controller
-# /0/2        scsi1       storage
-# /0/2/0.0.0  /dev/cdrom  disk       DVD reader
-# WARNING: output may be incomplete or inaccurate, you should run this program as super-user.
-
-    try:
-        hardware = pickle.load(open("hardware.cache", "rb"))
-        LOG.debug('Loading hardware.cache')
-    except IOError:
-        LOG.debug('Dumping hardware.cache')
-        grep = 'grep -E "memory|processor|bridge|network|storage"'
-        command = 'lshw -short -sanitize | cut -b25- | ' + grep
-        hardware = subprocess.check_output(command, shell = True)
-        pickle.dump(hardware, open("hardware.cache", "wb"))
-
-    with open(LOGDIR + '/hardware.log', 'w') as log:
-        log.write(hardware)
-
-    TAG['hardware'] = hardware
-
-    command = 'gcc --version | head -n1'
-    TAG['compiler'] = subprocess.check_output(command, shell = True).strip()
-
-    command = '/lib/x86_64-linux-gnu/libc.so.6 | head -n1'
-    TAG['libc'] = subprocess.check_output(command, shell = True).strip()
-
-    TAG['cwd'] = cwd
-    TAG['program'] = program
+    ProgramSection().gather().show().get()
+    SoftwareSection().gather().show().get()
 
     count = CFG.get('count')
     build = CFG.get('build')
@@ -233,7 +294,7 @@ def main():
 
     cores = str(multiprocessing.cpu_count())
 
-# TODO: get human readable output, then process using Python
+# TODO: get/log human readable output, then process using Python
 
     pidstat = '& pidstat -s -r -d -u -h -p $! 1 | sed "s| \+|,|g" | grep ^, | cut -b2-'
     command = run.format(cores, last, program) + pidstat
@@ -288,6 +349,8 @@ def main():
 
     with open(LOGDIR + '/sanity.log', 'w') as log:
         log.write(output)
+
+#
 
     try:
         output = pickle.load(open("benchmark.cache", "rb"))

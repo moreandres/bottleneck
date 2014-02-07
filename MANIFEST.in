@@ -1,4 +1,4 @@
-include README LICENSE setup.py
+include README.md LICENSE setup.py
 recursive-include bottleneck *
 recursive-include cfg *
 recursive-include tests *
