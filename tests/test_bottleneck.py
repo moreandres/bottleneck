@@ -60,69 +60,67 @@ class TestSanitySection(unittest.TestCase):
     def test_init(self):
         assert bt.SanitySection(), 'could not init SanitySection'
     def test_gather(self):
-        assert bt.SanitySection().gather(), 'could not gather SanitySection'
+        section = bt.SanitySection()
+        section.tags.update({ 'build': 'CFLAGS={0} make', 'run': 'OMP_NUM_THREADS={0} N={1} ./{2}', 'cores' : '1', 'first': '1024'})
+        assert section.gather(), 'could not gather SanitySection'
     def test_get(self):
         assert bt.SanitySection().gather().get(), 'could not get SanitySection'
 
 class TestBenchmarkSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.BenchmarkSection(), 'could not init BenchmarkSection'
     def test_gather(self):
-        pass
+        assert bt.BenchmarkSection().gather(), 'could not gather BenchmarkSection'
     def test_get(self):
-        pass
+        assert bt.BenchmarkSection().gather().get(), 'could not get BenchmarkSection'
 
 class TestWorkloadSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.WorkloadSection(), 'could not init WorkloadSection'
     def test_gather(self):
-        pass
+        assert bt.WorkloadSection().gather(), 'could not gather WorkloadSection'
     def test_get(self):
-        pass
+        assert bt.WorkloadSection().gather().get(), 'could not get WorkloadSection'
 
 class TestScalabilitySection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.ScalabilitySection(), 'could not init ScalabilitySection'
     def test_gather(self):
-        pass
+        assert bt.ScalabilitySection().gather(), 'could not gather ScalabilitySection'
     def test_get(self):
-        pass
+        assert bt.ScalabilitySection().gather().get(), 'could not get ScalabilitySection'
 
 class TestProfileSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.ProfileSection(), 'could not init ProfileSection'
     def test_gather(self):
-        pass
+        assert bt.ProfileSection().gather(), 'could not gather ProfileSection'
     def test_get(self):
-        pass
+        assert bt.ProfileSection().gather().get(), 'could not get ProfileSection'
 
 class TestResourcesSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.ResourcesSection(), 'could not init ResourcesSection'
     def test_gather(self):
-        pass
+        assert bt.ResourcesSection().gather(), 'could not gather ResourcesSection'
     def test_get(self):
-        pass
+        assert bt.ResourcesSection().gather().get(), 'could not get ResourcesSection'
 
 class TestVectorizationSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.VectorizationSection(), 'could not init VectorizationSection'
     def test_gather(self):
-        pass
+        assert bt.VectorizationSection().gather(), 'could not gather VectorizationSection'
     def test_get(self):
-        pass
+        assert bt.VectorizationSection().gather().get(), 'could not get VectorizationSection'
 
 class TestCountersSection(unittest.TestCase):
     def test_init(self):
-        pass
+        assert bt.CountersSection(), 'could not init CountersSection'
     def test_gather(self):
-        pass
+        assert bt.CountersSection().gather(), 'could not gather CountersSection'
     def test_get(self):
-        pass
-
-class TestReport(unittest.TestCase):
-    def test_init(self):
-        pass
+        assert bt.CountersSection().gather().get(), 'could not get CountersSection'
 
 if __name__ == '__main__':
     unittest.main()

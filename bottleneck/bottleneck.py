@@ -233,11 +233,11 @@ class SoftwareSection(Section):
 
 class SanitySection(Section):
     def __init__(self):
-        LOG.debug('Creating program section')
+        LOG.debug('Creating sanity section')
         Section.__init__(self, 'sanity')
-    def run(self):
+    def gather(self):
         test = ' && '.join([ self.tags['build'].format('-O3'),
-                             run.format(self.tags['cores'],
+                             self.tags['run'].format(self.tags['cores'],
                                         self.tags['first'],
                                         self.tags['program']) ])
         self.run(test)
@@ -245,44 +245,51 @@ class SanitySection(Section):
 
 class BenchmarkSection(Section):
     def __init__(self):
-        pass
-    def run(self):
-        pass
+        LOG.debug('Creating benchmark section')
+        Section.__init__(self, 'benchmark')
+    def gather(self):
+        self.run('ls')
+        return self
 
 class WorkloadSection(Section):
     def __init__(self):
-        pass
-    def run(self):
+        LOG.debug('Creating workload section')
+        Section.__init__(self, 'workload')
+    def gather(self):
         pass
 
 class ScalabilitySection(Section):
     def __init__(self):
-        pass
-    def run(self):
+        LOG.debug('Creating scalability section')
+        Section.__init__(self, 'scalability')
+    def gather(self):
         pass
 
 class ProfileSection(Section):
     def __init__(self):
-        pass
-    def run(self):
+        LOG.debug('Creating profile section')
+        Section.__init__(self, 'profile')
+    def gather(self):
         pass
 
 class ResourcesSection(Section):
     def __init__(self):
-        pass
-    def run(self):
+        LOG.debug('Creating resources section')
+        Section.__init__(self, 'resources')
+    def gather(self):
         pass
 
 class VectorizationSection(Section):
     def __init__(self):
         pass
-    def run(self):
+    def gather(self):
         pass
 
 class CountersSection(Section):
     def __init__(self):
-        pass
-    def run(self):
+        LOG.debug('Creating counters section')
+        Section.__init__(self, 'counters')
+    def gather(self):
         pass
 
 def main():
