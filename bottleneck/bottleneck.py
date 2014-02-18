@@ -119,10 +119,11 @@ class Section:
         self.name = name
         self.tags = tags
         self.cache = cache
+        self.count = 0
         LOG.debug('Creating section named {0}'.format(self.name))
     def run(self, command):
         """Run command keeping logs and caching output."""
-        cache = self.name + ".cache"
+        cache = '{0}.{1}.cache'.format(self.name, self.count)
         output = None
 
         if os.path.exists(cache) and time.time() - os.path.getmtime(cache) <= self.cache:
@@ -248,7 +249,26 @@ class BenchmarkSection(Section):
         LOG.debug('Creating benchmark section')
         Section.__init__(self, 'benchmark')
     def gather(self):
-        self.run('ls')
+
+        output = self.run('mpirun `which hpcc` && cat hpccoutf.txt').output
+
+        metrics = [ ('success', r'Success=(\d+.*)', None),
+                    ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
+                    ('dgemm', r'StarDGEMM_Gflops=(\d+.*)', 'GFlops'),
+                    ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBs'),
+                    ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPs'),
+                    ('stream', r'StarSTREAM_Triad=(\d+.*)', 'MBs'),
+                    ('fft', r'StarFFT_Gflops=(\d+.*)', 'GFlops'), ]
+
+        for metric in metrics:
+            try:
+                match = re.search(metric[1], output).group(1)
+            except AttributeError:
+                match = 'Unknown'
+        self.tags['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match, metric[2])
+
+        LOG.debug("System baseline completed")
+
         return self
 
 class WorkloadSection(Section):
@@ -256,7 +276,30 @@ class WorkloadSection(Section):
         LOG.debug('Creating workload section')
         Section.__init__(self, 'workload')
     def gather(self):
-        pass
+
+        outputs = []
+        times = []
+        for i in range(0, int(count)):
+            start = time.time()
+            output = subprocess.check_output(run.format(cores, first, program), shell = True)
+            end = time.time()
+            elapsed = end - start
+            times.append(elapsed)
+            outputs.append(output)
+            LOG.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
+
+        array = numpy.array(times)
+        deviation = "Deviation: gmean {0:.2f} std {1:.2f}"
+        LOG.debug(deviation.format(scipy.stats.gmean(array), numpy.std(array)))
+
+        TAG['geomean'] = "%.5f" % scipy.stats.gmean(array)
+        TAG['stddev'] = "%.5f" % numpy.std(array)
+
+        TAG['max'] = "%.5f" % numpy.max(array)
+        TAG['min'] = "%.5f" % numpy.min(array)
+
+        with open(LOGDIR + '/workload.log', 'w') as log:
+            log.write("\n".join(outputs))
 
 class ScalabilitySection(Section):
     def __init__(self):
@@ -264,6 +307,61 @@ class ScalabilitySection(Section):
         Section.__init__(self, 'scalability')
     def gather(self):
         pass
+
+class HistogramSection(Section):
+    def __init__(self):
+        LOG.debug('Creating histogram section')
+        Section.__init__(self, 'histogram')
+    def gather(self):
+        buckets, bins, patches = matplotlib.pyplot.hist(times,
+                                                        bins=math.ceil(math.sqrt(int(count))),
+                                                        normed=True)
+        matplotlib.pyplot.plot(bins, 
+                               scipy.stats.norm.pdf(bins,
+                                                    loc = numpy.mean(array),
+                                                    scale = array.std()),
+                               'r--')
+        matplotlib.pyplot.xlabel('time in seconds')
+        matplotlib.pyplot.ylabel('ocurrences in units')
+        matplotlib.pyplot.title('histogram')
+        matplotlib.pyplot.grid(True)  
+        matplotlib.pyplot.savefig('hist.pdf', bbox_inches=0)
+        matplotlib.pyplot.clf()
+        LOG.debug("Plotted histogram")
+
+# TODO: detect/report outliers
+
+class ScalingSection(Section):
+    def __init__(self):
+        data = {}
+        outputs = []
+        for size in range(int(first), int(last) + 1, int(increment)):
+            start = time.time()
+            output = subprocess.check_output(run.format(cores, size, program), shell = True)
+            end = time.time()
+            outputs.append(output)
+            elapsed = end - start
+            data[size] = elapsed
+            LOG.debug("Problem at {0} took {1:.2f} seconds".format(size, elapsed))
+        array = numpy.array(data.values())
+
+# TODO: kill execution if time takes more than a limit
+
+        xvalues = data.keys()
+        xvalues.sort()
+
+        matplotlib.pyplot.plot(data.values())
+        matplotlib.pyplot.xlabel('problem size in bytes')
+        matplotlib.pyplot.xticks(range(0, len(data.values())), xvalues)
+        matplotlib.pyplot.grid(True)  
+
+# TODO: add problem size as labels in X axis
+
+        matplotlib.pyplot.ylabel('time in seconds')
+        matplotlib.pyplot.title('data size scaling')
+        matplotlib.pyplot.savefig('data.pdf', bbox_inches=0)
+        matplotlib.pyplot.clf()
+        LOG.debug("Plotted problem scaling")
 
 class ProfileSection(Section):
     def __init__(self):
@@ -296,14 +394,14 @@ def main():
 
     CFG = ConfigurationParser().load()
 
-    HardwareSection().gather().show().get()
+    HardwareSection(cache = 3600).gather().show().get()
 
 # TODO: check if baseline results are valid
 # TODO: choose size to fit in 1 minute
 # TODO: cli option to not do any smart thing like choosing problem size
 
     ProgramSection().gather().show().get()
-    SoftwareSection().gather().show().get()
+    SoftwareSection(cache = 3600).gather().show().get()
 
     count = CFG.get('count')
     build = CFG.get('build')
@@ -353,118 +451,12 @@ def main():
     TAG['resources'] = output
     LOG.debug("Resource usage plotting completed")
 
-#
-
-#
-
-    try:
-        output = pickle.load(open("benchmark.cache", "rb"))
-        LOG.debug('Loading benchmark.cache')
-    except IOError:
-        LOG.debug('Dumping benchmark.cache')
-        benchmark = 'mpirun `which hpcc` && cat hpccoutf.txt'
-        output = subprocess.check_output(benchmark, shell = True)
-        pickle.dump(output, open("benchmark.cache", "wb"))
-
-    with open(LOGDIR + '/benchmarks.log', 'w') as log:
-        log.write(output)
-
-    metrics = [ ('success', r'Success=(\d+.*)', None),
-                ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
-                ('dgemm', r'StarDGEMM_Gflops=(\d+.*)', 'GFlops'),
-                ('ptrans', r'PTRANS_GBs=(\d+.*)', 'GBs'),
-                ('random', r'StarRandomAccess_GUPs=(\d+.*)', 'GUPs'),
-                ('stream', r'StarSTREAM_Triad=(\d+.*)', 'MBs'),
-                ('fft', r'StarFFT_Gflops=(\d+.*)', 'GFlops'), ]
-
-    for metric in metrics:
-        try:
-            match = re.search(metric[1], output).group(1)
-        except AttributeError:
-            match = 'Unknown'
-        TAG['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match, metric[2])
-
-    LOG.debug("System baseline completed")
-
-    outputs = []
-    times = []
-    for i in range(0, int(count)):
-        start = time.time()
-        output = subprocess.check_output(run.format(cores, first, program), shell = True)
-        end = time.time()
-        elapsed = end - start
-        times.append(elapsed)
-        outputs.append(output)
-        LOG.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
-    array = numpy.array(times)
-    deviation = "Deviation: gmean {0:.2f} std {1:.2f}"
-    LOG.debug(deviation.format(scipy.stats.gmean(array), numpy.std(array)))
-
-    TAG['geomean'] = "%.5f" % scipy.stats.gmean(array)
-    TAG['stddev'] = "%.5f" % numpy.std(array)
-
-    TAG['max'] = "%.5f" % numpy.max(array)
-    TAG['min'] = "%.5f" % numpy.min(array)
-
-# TODO: append? instead of sending list
-
-    with open(LOGDIR + '/workload.log', 'w') as log:
-        log.write("\n".join(outputs))
-
-    # min/max
-
-    buckets, bins, patches = matplotlib.pyplot.hist(times,
-                                                    bins=math.ceil(math.sqrt(int(count))),
-                                                    normed=True)
-    matplotlib.pyplot.plot(bins, 
-                           scipy.stats.norm.pdf(bins,
-                                                loc = numpy.mean(array),
-                                                scale = array.std()),
-                           'r--')
-    matplotlib.pyplot.xlabel('time in seconds')
-    matplotlib.pyplot.ylabel('ocurrences in units')
-    matplotlib.pyplot.title('histogram')
-    matplotlib.pyplot.grid(True)  
-    matplotlib.pyplot.savefig('hist.pdf', bbox_inches=0)
-    matplotlib.pyplot.clf()
-    LOG.debug("Plotted histogram")
-
-# TODO: detect/report outliers
+    BenchmarkSection(cache = 3600).gather().show().get()
+    WorkloadSection().gather().show.get()
+    HistogramSection().gather().show.get()
+    ScalingSection().gather.show.get()
 
 # TODO: historical comparison
-
-    data = {}
-    outputs = []
-    for size in range(int(first), int(last) + 1, int(increment)):
-        start = time.time()
-        output = subprocess.check_output(run.format(cores, size, program), shell = True)
-        end = time.time()
-        outputs.append(output)
-        elapsed = end - start
-        data[size] = elapsed
-        LOG.debug("Problem at {0} took {1:.2f} seconds".format(size, elapsed))
-    array = numpy.array(data.values())
-
-# TODO: kill execution if time takes more than a limit
-
-    xvalues = data.keys()
-    xvalues.sort()
-
-    matplotlib.pyplot.plot(data.values())
-    matplotlib.pyplot.xlabel('problem size in bytes')
-    matplotlib.pyplot.xticks(range(0, len(data.values())), xvalues)
-    matplotlib.pyplot.grid(True)  
-
-# TODO: add problem size as labels in X axis
-
-    matplotlib.pyplot.ylabel('time in seconds')
-    matplotlib.pyplot.title('data size scaling')
-    matplotlib.pyplot.savefig('data.pdf', bbox_inches=0)
-    matplotlib.pyplot.clf()
-    LOG.debug("Plotted problem scaling")
-
-    with open(LOGDIR + '/size.log', 'w') as log:
-        log.write("\n".join(outputs))
 
     outputs = []
     procs = []
@@ -534,8 +526,6 @@ def main():
 
     with open(LOGDIR + '/opts.log', 'w') as log:
         log.write("\n".join(outputs))
-
-# TODO: make all interesting commands to log into timestamp folder
 
     command = build.format('"-O3 -ftree-vectorizer-verbose=7" 2>&1')
     output = subprocess.check_output(command, shell = True)

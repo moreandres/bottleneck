@@ -90,6 +90,22 @@ class TestScalabilitySection(unittest.TestCase):
     def test_get(self):
         assert bt.ScalabilitySection().gather().get(), 'could not get ScalabilitySection'
 
+class TestHistogramSection(unittest.TestCase):
+    def test_init(self):
+        assert bt.HistogramSection(), 'could not init HistogramSection'
+    def test_gather(self):
+        assert bt.HistogramSection().gather(), 'could not gather HistogramSection'
+    def test_get(self):
+        assert bt.HistogramSection().gather().get(), 'could not get HistogramSection'
+
+class TestScalingSection(unittest.TestCase):
+    def test_init(self):
+        assert bt.ScalingSection(), 'could not init ScalingSection'
+    def test_gather(self):
+        assert bt.ScalingSection().gather(), 'could not gather ScalingSection'
+    def test_get(self):
+        assert bt.ScalingSection().gather().get(), 'could not get ScalingSection'
+
 class TestProfileSection(unittest.TestCase):
     def test_init(self):
         assert bt.ProfileSection(), 'could not init ProfileSection'
