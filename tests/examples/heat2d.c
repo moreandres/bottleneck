@@ -17,7 +17,9 @@ void setup();
 
 int main()
 {
-  final = atoi (getenv ("N"));
+  final = 1024;
+  if (getenv("N"))
+    final = atoi(getenv("N"));
 
   int temp;
 

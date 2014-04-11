@@ -3,7 +3,10 @@
 
 int main()
 {
-  int size = atoi(getenv("N"));
+  int size = 1024;
+  if (getenv("N"))
+    size = atoi(getenv("N"));
+
   float *a = malloc(sizeof(float) * size * size);
   float *b = malloc(sizeof(float) * size * size);
   float *c = malloc(sizeof(float) * size * size);

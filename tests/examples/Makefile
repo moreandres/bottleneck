@@ -1,9 +1,10 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -O3
-PROGRAM ?= matrix
 
 all:
-	$(CC) $(CFLAGS) $(PROGRAM).c -o $(PROGRAM) -fopenmp
+	$(CC) $(CFLAGS) matrix.c -o matrix -fopenmp
+	$(CC) $(CFLAGS) heat2d.c -o heat2d -fopenmp
+	$(CC) $(CFLAGS) mandel.c -o mandel -fopenmp
 
 clean:
-	rm -fr *~ $(PROGRAM) $(PROGRAM).o
+	rm -fr *~ *.o matrix heat2d mandel

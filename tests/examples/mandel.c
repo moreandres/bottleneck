@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #define X_RESN 1024
 #define Y_RESN 1024
@@ -23,7 +24,9 @@ int main()
   int iters;
   int res[X_RESN][Y_RESN];
 
-  iters = atoi (getenv ("N"));
+  iters = 1024;
+  if (getenv("N"))
+    iters = atoi(getenv("N"));
 
 #pragma omp parallel for shared(res, iters) private(i, j, z, c, k, temp, lensq)
   for (i = 0; i < Y_RESN; i++)
@@ -50,6 +53,8 @@ int main()
 	  res[i][j] = 1;
 
       }
+
+  assert(res[0][0]);
 
   return 0;
 }

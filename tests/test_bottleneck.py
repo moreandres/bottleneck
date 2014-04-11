@@ -1,6 +1,8 @@
 import random
 import unittest
 import bottleneck.bottleneck as bt
+import subprocess
+import os
 
 class TestLogger(unittest.TestCase):
     def test_init(self):
@@ -20,17 +22,23 @@ class TestConfigurationParser(unittest.TestCase):
 
 class TestSection(unittest.TestCase):
     def test_init(self):
-        assert bt.Section('name', {}), 'could not init Section without tags'
-        assert bt.Section('name', { 'key0': 'value0', 'key1': 'value1'}), 'could not init Section with tags'
+        """Test how TestSection initialize."""
+        bt.Tags().tags = {}
+        assert bt.Section('name'), 'could not init Section without tags'
+        bt.Tags().tags = { 'key0': 'value0', 'key1': 'value1'}
+        assert bt.Section('name'), 'could not init Section with tags'
         
     def test_gather(self):
-        assert bt.Section('name',  {}).gather(), 'could not gather Section'
+        bt.Tags().tags = {}
+        assert bt.Section('name').gather(), 'could not gather Section'
 
     def test_get(self):
-        assert bt.Section('name', { 'key0': 'value0', 'key1': 'value1'}).get()['key0'] == 'value0', 'could not get Section tags'
+        bt.Tags().tags = { 'key0': 'value0', 'key1': 'value1'}
+        assert bt.Section('name').get()['key0'] == 'value0', 'could not get Section tags'
 
     def test_show(self):
-        assert bt.Section('name', { 'key0': 'value0', 'key1': 'value1'}).show(), 'could not show Section'
+        bt.Tags().tags = { 'key0': 'value0', 'key1': 'value1'}
+        assert bt.Section('name').show(), 'could not show Section'
 
 class TestHardwareSection(unittest.TestCase):
     def test_init(self):
@@ -58,13 +66,24 @@ class TestSoftwareSection(unittest.TestCase):
 
 class TestSanitySection(unittest.TestCase):
     def test_init(self):
-        assert bt.SanitySection(), 'could not init SanitySection'
-    def test_gather(self):
+        bt.Tags().tags = {
+            'first': '512',
+            'last': '1024',
+            'increment': '64',
+            'run': 'OMP_NUM_THREADS={0} N={1} ./{2}',
+            'cores': '2',
+            'size': '512',
+            'program': 'matrix',
+            'dir': 'tests/examples',
+            'clean': 'make clean',
+            'build': 'CFLAGS="{0}" make',
+            'cflags': '-Wall -Wextra',
+            }
+        
         section = bt.SanitySection()
-        section.tags.update({ 'build': 'CFLAGS={0} make', 'run': 'OMP_NUM_THREADS={0} N={1} ./{2}', 'cores' : '1', 'first': '1024'})
+        assert section, 'could not init SanitySection'
         assert section.gather(), 'could not gather SanitySection'
-    def test_get(self):
-        assert bt.SanitySection().gather().get(), 'could not get SanitySection'
+        assert section.get(), 'could not get SanitySection'
 
 class TestBenchmarkSection(unittest.TestCase):
     def test_init(self):
@@ -75,36 +94,45 @@ class TestBenchmarkSection(unittest.TestCase):
         assert bt.BenchmarkSection().gather().get(), 'could not get BenchmarkSection'
 
 class TestWorkloadSection(unittest.TestCase):
-    def test_init(self):
-        assert bt.WorkloadSection(), 'could not init WorkloadSection'
-    def test_gather(self):
-        assert bt.WorkloadSection().gather(), 'could not gather WorkloadSection'
-    def test_get(self):
-        assert bt.WorkloadSection().gather().get(), 'could not get WorkloadSection'
+    def test_section(self):
+        bt.Tags().tags = {
+            'first': '512',
+            'last': '512',
+            'increment': '64',
+            'run': 'OMP_NUM_THREADS={0} N={1} ./{2}',
+            'cores': '2',
+            'size': '512',
+            'count': '32',
+            'program': 'matrix',
+            'dir': 'tests/examples',
+            'clean': 'make clean',
+            'build': 'CFLAGS="{0}" make',
+            'cflags': '-Wall -Wextra',
+            }
+        section = bt.WorkloadSection()
+        assert section, 'could not init WorkloadSection'
+        assert section.gather(), 'could not init WorkloadSection'
+        assert section.get(), 'could not get WorkloadSection'
 
-class TestScalabilitySection(unittest.TestCase):
-    def test_init(self):
-        assert bt.ScalabilitySection(), 'could not init ScalabilitySection'
-    def test_gather(self):
-        assert bt.ScalabilitySection().gather(), 'could not gather ScalabilitySection'
-    def test_get(self):
-        assert bt.ScalabilitySection().gather().get(), 'could not get ScalabilitySection'
-
-class TestHistogramSection(unittest.TestCase):
-    def test_init(self):
-        assert bt.HistogramSection(), 'could not init HistogramSection'
-    def test_gather(self):
-        assert bt.HistogramSection().gather(), 'could not gather HistogramSection'
-    def test_get(self):
-        assert bt.HistogramSection().gather().get(), 'could not get HistogramSection'
-
-class TestScalingSection(unittest.TestCase):
-    def test_init(self):
-        assert bt.ScalingSection(), 'could not init ScalingSection'
-    def test_gather(self):
-        assert bt.ScalingSection().gather(), 'could not gather ScalingSection'
-    def test_get(self):
-        assert bt.ScalingSection().gather().get(), 'could not get ScalingSection'
+class TestScalingSection(unittest.TestCase):        
+    def test_section(self):
+        bt.Tags().tags = {
+            'first': '512',
+            'last': '1024',
+            'increment': '64',
+            'run': 'OMP_NUM_THREADS={0} N={1} ./{2}',
+            'cores': '2',
+            'size': '512',
+            'program': 'matrix',
+            'dir': 'tests/examples',
+            'clean': 'make clean',
+            'build': 'CFLAGS="{0}" make',
+            'cflags': '-Wall -Wextra',
+            }
+        section = bt.ScalingSection()
+        assert section, 'could not init ScalingSection'
+        assert section.gather(), 'could not gather ScalingSection'
+        assert section.get(), 'could not get ScalingSection'
 
 class TestProfileSection(unittest.TestCase):
     def test_init(self):
@@ -137,6 +165,14 @@ class TestCountersSection(unittest.TestCase):
         assert bt.CountersSection().gather(), 'could not gather CountersSection'
     def test_get(self):
         assert bt.CountersSection().gather().get(), 'could not get CountersSection'
+
+class TestScript(unittest.TestCase):
+    def test_install(self):
+        assert subprocess.check_output('sudo python setup.py install', shell=True)
+    def test_help(self):
+        assert subprocess.check_output('sudo python setup.py install; bt --help', shell=True)
+    def test_version(self):
+        assert subprocess.check_output('sudo python setup.py install; bt --version', shell=True)
 
 if __name__ == '__main__':
     unittest.main()

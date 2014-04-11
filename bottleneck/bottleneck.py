@@ -5,6 +5,7 @@ Bottleneck - Performance report generator.
 """
 
 import ConfigParser
+
 import argparse
 import datetime
 import logging
@@ -13,7 +14,12 @@ import matplotlib.pyplot
 import multiprocessing
 import numpy
 import os
-import pickle
+
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
 import platform
 import pprint
 import re
@@ -22,13 +28,27 @@ import socket
 import subprocess
 import time
 
-# Tokens to be replaced at the report are kept here."""
-TAG = {}
+class Singleton(type):
+    """Singleton metaclass."""
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        """Return singleton if already there, otherwise create it."""
+        if cls not in cls._instances:
+            instance = super(Singleton, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
 
-class Logger:
+class Tags:
+    """Tags to be replaced at the report."""
+    __metaclass__ = Singleton
+    def __init__(self):
+        """Tags are empty."""
+        self.tags = {}
+
+class Log:
     """Enable logging."""
-
-    def __init__(self, name):
+    __metaclass__ = Singleton
+    def __init__(self):
         """Store all logs in file, show also in console."""
 
 # TODO: cli option to select log level in console
@@ -39,18 +59,18 @@ class Logger:
     
         timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
-        self.logger = logging.getLogger(name)
-        self.logger.timestamp = timestamp
-        self.logger.logdir = '{0}/.bt/{1}/{2}'.format(os.path.expanduser("~"),
-                                                      program,
-                                                      self.logger.timestamp)
+        self.logger = logging.getLogger('bottleneck')
+        self.timestamp = timestamp
+        self.logdir = '{0}/.bt/{1}/{2}'.format(os.path.expanduser("~"),
+                                               program,
+                                               self.timestamp)
 
-        if not os.path.exists(self.logger.logdir):
-            os.makedirs(self.logger.logdir)
+        if not os.path.exists(self.logdir):
+            os.makedirs(self.logdir)
 
         self.logger.setLevel(logging.DEBUG)
 
-        fileh = logging.FileHandler(self.logger.logdir + '/full.log')
+        fileh = logging.FileHandler(self.logdir + '/full.log')
         fileh.setLevel(logging.DEBUG)
         consoleh = logging.StreamHandler()
         consoleh.setLevel(logging.DEBUG)
@@ -63,6 +83,17 @@ class Logger:
         self.logger.addHandler(fileh)
         self.logger.addHandler(consoleh)
 
+        self.logger.debug('Logging to {0}'.format(self.logdir))
+
+    def debug(self, message):
+        self.logger.debug(message)
+
+    def info(self, message):
+        self.logger.info(message)
+
+    def error(self, message):
+        self.logger.error(message)
+
     def close(self):
         """Close logging."""
 
@@ -70,22 +101,20 @@ class Logger:
         
     def get(self):
         """Get logger instance."""
-        self.logger.debug('Logging to {0}'.format(self.logger.logdir))
         return self.logger
 
-LOGGER = Logger('bt')
-LOG = LOGGER.get()
-LOGDIR = LOGGER.logger.logdir
+# TODO: fix logging in unit tests
 
-class ConfigurationParser:
+class Config:
+    __metaclass__ = Singleton
     """ Parse configuration."""
 
     def __init__(self):
+
         """Empty configuration."""
         self.config = None
         self.parser = None
         self.args = None
-        LOG.debug('Starting configuration parser')
 
     def load(self):
         """Load arguments and configuration from file."""
@@ -94,51 +123,78 @@ class ConfigurationParser:
         self.parser = argparse.ArgumentParser(description=description,
                                               epilog=epilog,
                                               version='0.0.1')
+
+        # TODO: use action to verify that configuration file exists
+
         self.parser.add_argument('--config', '-c',
                                  help='path to configuration',
-                                 default='/home/amore/tmp/bottleneck/bt/bt.cfg')
-        LOG.debug('Parsing arguments')
+                                 default= os.path.abspath('.') + '/bt.cfg')
+        self.parser.add_argument('--debug', '-d',
+                                 action='store_true',
+                                 help='enable verbose logging')
+
         self.args = self.parser.parse_args()
         self.config = ConfigParser.ConfigParser()
         path = os.path.abspath(self.args.config)
-        LOG.debug('Loading config from {0}'.format(path))
+
+        if not os.path.exists(path):
+            print 'Configuration file not found.'
+            raise SystemExit
+
+        # TODO: use $CWD/bt.cfg, create it from ~/.bt/bt.cfg if not there
+
         self.config.read(path)
         return self
 
     def get(self, key, section='default'):
         """Get configuration attribute."""
         value = self.config.get(section, key)
-        LOG.debug('Getting {0} from config: {1}'.format(key, value))
+        Log().debug('Getting {0} from config: {1}'.format(key, value))
         return value
 
-CFG = None # ConfigurationParser().load()
+    def items(self, section='default'):
+        """Get tags as a dictionary."""
+        Log().debug('Getting all items from config')
+        try:
+            items = dict(zip(self.config.items(section)[0::2],
+                             self.config.items(section)[1::2]))
+        except ConfigParser.NoSectionError:
+            Log().error('No configuration found')
+            items = {}
+        return items
 
 class Section:
-    def __init__(self, name, tags = {}, cache = 0):
-        """Store section name and context tags."""
+    """Report section."""
+    def __init__(self, name):
+        """Store section name, config and tags."""
         self.name = name
-        self.tags = tags
-        self.cache = cache
-        self.count = 0
-        LOG.debug('Creating section named {0}'.format(self.name))
-    def run(self, command):
+        self.tags = Tags().tags
+        self.config = Config()
+        self.counter = {}
+        self.output = None
+        self.log = Log()
+        self.log.debug('Creating section named {0}'.format(self.name))
+    def command(self, cmd):
         """Run command keeping logs and caching output."""
-        cache = '{0}.{1}.cache'.format(self.name, self.count)
+
+        # keep count to cache multiple executions of the same command
+        try:
+            self.counter[cmd] += 1
+        except:
+            self.counter[cmd] = 0
+
+        temp = '{0}.{1}.cache'.format(self.name, self.counter[cmd])
         output = None
 
-        if os.path.exists(cache) and time.time() - os.path.getmtime(cache) <= self.cache:
-            try:
-                output = pickle.load(open(cache, "rb"))
-                LOG.debug('Loading ' + cache)
-            except IOError:
-                LOG.debug('Dumping ' + cache)
-                output = subprocess.check_output(command, shell = True).strip()
-                pickle.dump(output, open(cache, "wb"))
-        else:
-            LOG.debug('Running ' + cache)
-            output = subprocess.check_output(command, shell = True).strip()
+        try:
+            output = pickle.load(open(temp, "rb"))
+            self.log.debug('Loading ' + temp)
+        except IOError:
+            self.log.debug('Dumping ' + temp)
+            output = subprocess.check_output(cmd, shell = True).strip()
+            pickle.dump(output, open(temp, "wb"))
 
-        with open(LOGDIR + '/' + self.name + '.log', 'w') as log:
+        with open(self.log.logdir + '/' + self.name + '.log', 'w') as log:
             log.write(output)
 
         self.output = output
@@ -147,62 +203,43 @@ class Section:
 
     def gather(self):
         """Populate section contents."""
-        LOG.debug('Empty gather in section named {0}'.format(self.name))
+        self.log.debug('Empty gather in section named {0}'.format(self.name))
         return self
     def get(self):
         """Return tags."""
-        LOG.debug('Returning tags from section named {0}'.format(self.name))
+        self.log.debug('Returning tags from section named {0}'.format(self.name))
         return self.tags
     def show(self):
         """Show section name and tags in console."""
-        LOG.debug('Showing section named {0}'.format(self.name))
+        self.log.debug('Showing section named {0}'.format(self.name))
         for key, value in sorted(self.tags.iteritems()):
-            LOG.debug('Tag {0} is {1}'.format(key, value))
+            self.log.debug('Tag {0} is {1}'.format(key, value))
         return self
 
 class HardwareSection(Section):
+    """Gather hardware information."""
     def __init__(self):
         """Create hardware section."""
-        LOG.debug('Creating hardware section')
-        Section.__init__(self, 'hardware', cache=86400)
+        Section.__init__(self, 'hardware')
     def gather(self):
         """Gather hardware information."""
 
-        # WARNING: you should run this program as super-user.
-        # H/W path    Device      Class      Description
-        # ==============================================
-        #                         system     Computer
-        # /0                      bus        Motherboard
-        # /0/0                    memory     994MiB System memory
-        # /0/1                    processor  Intel(R) Core(TM) i5-3320M CPU @ 2.60GHz
-        # /0/100                  bridge     440FX - 82441FX PMC [Natoma]
-        # /0/100/1                bridge     82371SB PIIX3 ISA [Natoma/Triton II]
-        # /0/100/1.1              storage    82371AB/EB/MB PIIX4 IDE
-        # /0/100/2                display    VirtualBox Graphics Adapter
-        # /0/100/3    eth0        network    82540EM Gigabit Ethernet Controller
-        # /0/100/4                generic    VirtualBox Guest Service
-        # /0/100/6                bus        KeyLargo/Intrepid USB
-        # /0/100/7                bridge     82371AB/EB/MB PIIX4 ACPI
-        # /0/100/d                storage    82801HM/HEM (ICH8M/ICH8M-E) SATA Controller
-        # /0/2        scsi1       storage
-        # /0/2/0.0.0  /dev/cdrom  disk       DVD reader
-        # WARNING: output may be incomplete or inaccurate, you should run this program as super-user.
-
-        ls = 'lshw -short -sanitize | cut -b25- | '
+        listing = 'lshw -short -sanitize | cut -b25- | '
         grep = 'grep -E "memory|processor|bridge|network|storage"'
-        self.tags['hardware'] = self.run(ls + grep).output
+        self.tags['hardware'] = self.command(listing + grep).output
 
         return self
 
 class ProgramSection(Section):
+    """Gather program information."""
     def __init__(self):
         """Create program section."""
-        LOG.debug('Creating program section')
         Section.__init__(self, 'program')
+        self.log = Log()
     def gather(self):
         """Gather program information."""
-        self.tags['timestamp'] = LOG.timestamp
-        self.tags['log'] = LOG.logdir
+        self.tags['timestamp'] = self.log.timestamp
+        self.tags['log'] = self.log.logdir
         self.tags['host'] = socket.getfqdn()
         self.tags['distro'] = ', '.join(platform.linux_distribution())
         self.tags['platform'] = platform.platform()
@@ -212,45 +249,54 @@ class ProgramSection(Section):
         return self
 
 class SoftwareSection(Section):
+    """Gather software information."""
     def __init__(self):
         """Create program section."""
-        LOG.debug('Creating program section')
         Section.__init__(self, 'software')        
     def gather(self):
-
-        # gcc (Ubuntu/Linaro 4.7.3-1ubuntu1) 4.7.3
-        # Copyright (C) 2012 Free Software Foundation, Inc.
+        """Get compiler and C library version."""
 
         compiler = 'gcc --version'
-        self.tags['compiler'] = re.split('\n', self.run(compiler).output)[0]
-
-        # GNU C Library (Ubuntu EGLIBC 2.17-0ubuntu5.1) stable release version 2.17, by Roland McGrath et al.
-        # Copyright (C) 2012 Free Software Foundation, Inc.
+        self.tags['compiler'] = re.split('\n', self.command(compiler).output)[0]
 
         libc = '/lib/x86_64-linux-gnu/libc.so.6'
-        self.tags['libc'] = re.split('\n', self.run(libc).output)[0]
+        self.tags['libc'] = re.split('\n', self.command(libc).output)[0]
 
         return self
 
 class SanitySection(Section):
+    """Gather sanity information."""
     def __init__(self):
-        LOG.debug('Creating sanity section')
+        """Create sanity section."""
         Section.__init__(self, 'sanity')
+        self.dir = 'cd {0}'.format(self.tags['dir'])
+        self.build = self.tags['build'].format('-O3')
+        self.run = self.tags['run']
+        self.cores = self.tags['cores']
+        self.first = self.tags['first']
+        self.program = self.tags['program']
     def gather(self):
-        test = ' && '.join([ self.tags['build'].format('-O3'),
-                             self.tags['run'].format(self.tags['cores'],
-                                        self.tags['first'],
-                                        self.tags['program']) ])
-        self.run(test)
+        """Build and run the program using a small input size."""
+        test = ' && '.join([ self.dir,
+                             self.build,
+                             self.run.format(self.cores,
+                                             self.first,
+                                             self.program),
+                             'cd -'])
+        self.command(test)
         return self
 
 class BenchmarkSection(Section):
+    """Gather benchmark information."""
     def __init__(self):
-        LOG.debug('Creating benchmark section')
+        """Create benchmark section."""
         Section.__init__(self, 'benchmark')
     def gather(self):
-
-        output = self.run('mpirun `which hpcc` && cat hpccoutf.txt').output
+        """Run HPCC and gather metrics."""
+        # TBD: make this a tag
+        cores = str(multiprocessing.cpu_count())
+        mpirun = 'mpirun -np {0} `which hpcc` && cat hpccoutf.txt'
+        output = self.command(mpirun.format(cores)).output
 
         metrics = [ ('success', r'Success=(\d+.*)', None),
                     ('hpl', r'HPL_Tflops=(\d+.*)', 'TFlops'),
@@ -265,56 +311,63 @@ class BenchmarkSection(Section):
                 match = re.search(metric[1], output).group(1)
             except AttributeError:
                 match = 'Unknown'
-        self.tags['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match, metric[2])
+        self.tags['hpcc-{0}'.format(metric[0])] = '{0} {1}'.format(match,
+                                                                   metric[2])
 
-        LOG.debug("System baseline completed")
+        self.log.debug("System baseline completed")
 
         return self
 
 class WorkloadSection(Section):
+    """Gather workload information."""
     def __init__(self):
-        LOG.debug('Creating workload section')
+        """Create workload section."""
         Section.__init__(self, 'workload')
+
+        self.count = self.tags['count']
+        self.run = self.tags['run']
+        self.cores = self.tags['cores']
+        self.first = self.tags['first']
+        self.program = self.tags['program']
+        self.dir = self.tags['dir']
+        
     def gather(self):
+        """Run program multiple times, check geomean and deviation."""
+
+        # TODO: compile before running
 
         outputs = []
         times = []
-        for i in range(0, int(count)):
+        for i in range(0, int(self.count)):
             start = time.time()
-            output = subprocess.check_output(run.format(cores, first, program), shell = True)
+            cmd = ' && '.join([ 'cd {0}'.format(self.dir),
+                                self.run.format(self.cores,
+                                                self.first,
+                                                self.program),
+                                'cd -' ])
+
+            output = self.command(cmd)
+
             end = time.time()
             elapsed = end - start
             times.append(elapsed)
             outputs.append(output)
-            LOG.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
+            self.log.debug("Control {0} took {1:.2f} seconds".format(i, elapsed))
 
         array = numpy.array(times)
         deviation = "Deviation: gmean {0:.2f} std {1:.2f}"
-        LOG.debug(deviation.format(scipy.stats.gmean(array), numpy.std(array)))
+        self.log.debug(deviation.format(scipy.stats.gmean(array), numpy.std(array)))
 
-        TAG['geomean'] = "%.5f" % scipy.stats.gmean(array)
-        TAG['stddev'] = "%.5f" % numpy.std(array)
+        self.tags['geomean'] = "%.5f" % scipy.stats.gmean(array)
+        self.tags['stddev'] = "%.5f" % numpy.std(array)
 
-        TAG['max'] = "%.5f" % numpy.max(array)
-        TAG['min'] = "%.5f" % numpy.min(array)
+        self.tags['max'] = "%.5f" % numpy.max(array)
+        self.tags['min'] = "%.5f" % numpy.min(array)
 
-        with open(LOGDIR + '/workload.log', 'w') as log:
-            log.write("\n".join(outputs))
+        number = math.ceil(math.sqrt(int(self.tags['count'])))
 
-class ScalabilitySection(Section):
-    def __init__(self):
-        LOG.debug('Creating scalability section')
-        Section.__init__(self, 'scalability')
-    def gather(self):
-        pass
-
-class HistogramSection(Section):
-    def __init__(self):
-        LOG.debug('Creating histogram section')
-        Section.__init__(self, 'histogram')
-    def gather(self):
         buckets, bins, patches = matplotlib.pyplot.hist(times,
-                                                        bins=math.ceil(math.sqrt(int(count))),
+                                                        bins=number,
                                                         normed=True)
         matplotlib.pyplot.plot(bins, 
                                scipy.stats.norm.pdf(bins,
@@ -327,22 +380,53 @@ class HistogramSection(Section):
         matplotlib.pyplot.grid(True)  
         matplotlib.pyplot.savefig('hist.pdf', bbox_inches=0)
         matplotlib.pyplot.clf()
-        LOG.debug("Plotted histogram")
+        Log().debug("Plotted histogram")
+
+        return self
 
 # TODO: detect/report outliers
 
 class ScalingSection(Section):
+    """Gather scaling information."""
     def __init__(self):
+        """."""
+        # TODO: first, last, increment should be read from self.tags
+        Section.__init__(self, 'scaling')
+
+        self.tags = Tags().tags
+        self.first = self.tags['first']
+        self.last = self.tags['last']
+        self.increment = self.tags['increment']
+        self.run = self.tags['run']
+        self.cores = self.tags['cores']
+        self.size = self.tags['size']
+        self.program = self.tags['program']
+        self.dir = self.tags['dir']
+        self.cflags = self.tags['cflags']
+        self.clean = self.tags['clean']
+        self.build = self.tags['build']
+
+    def gather(self):
+        """Run program."""
+
+        cleanup = 'cd {0}; {1}; {2}'.format(self.dir,
+                                            self.clean,
+                                            self.build.format(self.cflags))
+        subprocess.check_output(cleanup, shell = True)
+
         data = {}
         outputs = []
-        for size in range(int(first), int(last) + 1, int(increment)):
+
+        for size in range(int(self.first),
+                          int(self.last) + 1,
+                          int(self.increment)):
             start = time.time()
-            output = subprocess.check_output(run.format(cores, size, program), shell = True)
+            output = self.command(' && '.join([ 'cd {0}'.format(self.dir), self.run.format(self.cores, self.size, self.program), 'cd -' ]))
             end = time.time()
             outputs.append(output)
             elapsed = end - start
             data[size] = elapsed
-            LOG.debug("Problem at {0} took {1:.2f} seconds".format(size, elapsed))
+            self.log.debug("Problem at {0} took {1:.2f} seconds".format(self.size, elapsed))
         array = numpy.array(data.values())
 
 # TODO: kill execution if time takes more than a limit
@@ -361,47 +445,76 @@ class ScalingSection(Section):
         matplotlib.pyplot.title('data size scaling')
         matplotlib.pyplot.savefig('data.pdf', bbox_inches=0)
         matplotlib.pyplot.clf()
-        LOG.debug("Plotted problem scaling")
+        self.log.debug("Plotted problem scaling")
+        
+        return self
+        
 
 class ProfileSection(Section):
+    """Gather performance profile information."""
     def __init__(self):
-        LOG.debug('Creating profile section')
+        """Create profile section."""
         Section.__init__(self, 'profile')
     def gather(self):
-        pass
+        """Run gprof and gather results."""
+        return self
 
 class ResourcesSection(Section):
+    """Gather system resources information."""
     def __init__(self):
-        LOG.debug('Creating resources section')
+        """Create resources section."""
         Section.__init__(self, 'resources')
     def gather(self):
-        pass
+        """Run program under pidstat."""
+        return self
 
 class VectorizationSection(Section):
+    """Gather vectorization information."""
     def __init__(self):
-        pass
+        """Create vectorization section."""
+        Section.__init__(self, 'vectorization')
     def gather(self):
-        pass
+        """Run oprofile."""
+        return self
 
 class CountersSection(Section):
+    """Gather hardware counters information."""
     def __init__(self):
-        LOG.debug('Creating counters section')
+        """Create hardware counters section."""
         Section.__init__(self, 'counters')
     def gather(self):
-        pass
+        """Run program and gather counter statistics."""
+        return self
+
+class ConfigSection(Section):
+    """Gather configuration information."""
+    def __init__(self):
+        """Create configuration section."""
+        Section.__init__(self, 'config')
+    def gather(self):
+        """Load configuration and update tags."""
+        return self
 
 def main():
+    """Gather information into tags, replace on a .tex file and compile."""
 
-    CFG = ConfigurationParser().load()
+    Config().load()
 
-    HardwareSection(cache = 3600).gather().show().get()
+    tags = Tags().tags
+
+# TODO: check why config file cannot be loaded
+    tags.update(Config().items())
+
+    tags.update(HardwareSection(TAG).gather().show().get())
 
 # TODO: check if baseline results are valid
 # TODO: choose size to fit in 1 minute
 # TODO: cli option to not do any smart thing like choosing problem size
 
-    ProgramSection().gather().show().get()
-    SoftwareSection(cache = 3600).gather().show().get()
+    tags.update(ProgramSection(TAG).gather().show().get())
+    tags.update(SoftwareSection(TAG).gather().show().get())
+
+# TODO: program should be read from a tag
 
     count = CFG.get('count')
     build = CFG.get('build')
@@ -412,19 +525,18 @@ def main():
 
     cores = str(multiprocessing.cpu_count())
 
-
 # TODO: get/log human readable output, then process using Python
 
     pidstat = '& pidstat -s -r -d -u -h -p $! 1 | sed "s| \+|,|g" | grep ^, | cut -b2-'
     command = run.format(cores, last, program) + pidstat
     output = subprocess.check_output(command, shell = True)
 
-    with open(LOGDIR + '/resources.log', 'w') as log:
+    with open(self.logger.logdir + '/resources.log', 'w') as log:
         log.write(output)
 
     lines = output.splitlines()
 
-# TODO: this should be parsed from output's header
+# TODO: this should be parsed from output's header, not hardcoded
 
     header = 'Time,PID,%usr,%system,%guest,%CPU,CPU,minflt/s,majflt/s,VSZ,RSS,%MEM,StkSize,StkRef,kB_rd/s,kB_wr/s,kB_ccwr/s,Command'
     fields = header.split(',')
@@ -445,16 +557,16 @@ def main():
             matplotlib.pyplot.grid(True)  
             matplotlib.pyplot.ylabel('percentage of available resources')
             matplotlib.pyplot.title('resource usage')
-            matplotlib.pyplot.savefig('{0}.pdf'.format(field, bbox_inches=0).replace('%',''))
+            name = '{0}.pdf'.format(field, bbox_inches=0).replace('%','')
+            matplotlib.pyplot.savefig(name)
             matplotlib.pyplot.clf()
 
     TAG['resources'] = output
-    LOG.debug("Resource usage plotting completed")
+    logging.getLogger('bottleneck').debug("Resource usage plotting completed")
 
-    BenchmarkSection(cache = 3600).gather().show().get()
-    WorkloadSection().gather().show.get()
-    HistogramSection().gather().show.get()
-    ScalingSection().gather.show.get()
+    TAG.update(BenchmarkSection().gather().show().get())
+    TAG.update(WorkloadSection().gather().show.get())
+    TAG.update(ScalingSection().gather.show.get())
 
 # TODO: historical comparison
 
@@ -462,7 +574,8 @@ def main():
     procs = []
     for core in range(1, int(cores) + 1):
         start = time.time()
-        output = subprocess.check_output(run.format(core, last, program), shell = True)
+        output = subprocess.check_output(run.format(core, last, program),
+                                         shell = True)
         end = time.time()
         outputs.append(output)
         elapsed = end - start
@@ -489,7 +602,7 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted thread scaling")
 
-    with open(LOGDIR + '/threads.log', 'w') as log:
+    with open(self.logger.logdir + '/threads.log', 'w') as log:
         log.write("\n".join(outputs))
 
     # TODO: procs[1] less than half procs[0] then supralinear then FAIL
@@ -524,7 +637,7 @@ def main():
     matplotlib.pyplot.clf()
     LOG.debug("Plotted optimizations")
 
-    with open(LOGDIR + '/opts.log', 'w') as log:
+    with open(self.logger.logdir + '/opts.log', 'w') as log:
         log.write("\n".join(outputs))
 
     command = build.format('"-O3 -ftree-vectorizer-verbose=7" 2>&1')
@@ -538,7 +651,7 @@ def main():
                             gprofgrep.format(program) ])
     output = subprocess.check_output(command, shell = True)
 
-    with open(LOGDIR + '/vectorization.log', 'w') as log:
+    with open(self.logger.logdir + '/vectorization.log', 'w') as log:
         log.write(output)
 
     TAG['profile'] = output
@@ -554,7 +667,7 @@ def main():
     cattest = 'cat /tmp/test | grep -v "^\s*:\s*$" | grep -v "0.00"'
     output = subprocess.check_output(cattest, shell = True)
 
-    with open(LOGDIR + '/annotation.log', 'w') as log:
+    with open(self.logger.logdir + '/annotation.log', 'w') as log:
         log.write(output)
 
     TAG['annotation'] = output
@@ -564,7 +677,7 @@ def main():
     output = subprocess.check_output(command, shell = True)
     TAG['counters'] = output
 
-    with open(LOGDIR + '/counters.log', 'w') as log:
+    with open(self.logger.logdir + '/counters.log', 'w') as log:
         log.write(output)
 
     LOG.debug("Hardware counters gathering completed")
