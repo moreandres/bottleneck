@@ -500,19 +500,21 @@ def main():
 
     Config().load()
 
+    cfg = Config()
+    log = Log()
     tags = Tags().tags
 
 # TODO: check why config file cannot be loaded
     tags.update(Config().items())
 
-    tags.update(HardwareSection(TAG).gather().show().get())
+    tags.update(HardwareSection(tags).gather().show().get())
 
 # TODO: check if baseline results are valid
 # TODO: choose size to fit in 1 minute
 # TODO: cli option to not do any smart thing like choosing problem size
 
-    tags.update(ProgramSection(TAG).gather().show().get())
-    tags.update(SoftwareSection(TAG).gather().show().get())
+    tags.update(ProgramSection(tags).gather().show().get())
+    tags.update(SoftwareSection(tags).gather().show().get())
 
 # TODO: program should be read from a tag
 
@@ -521,7 +523,7 @@ def main():
     run = CFG.get('run')
     first, last, increment = CFG.get('range', program).split(',')
 
-    TAG['range'] = str(range(int(first), int(last), int(increment)))
+    tags['range'] = str(range(int(first), int(last), int(increment)))
 
     cores = str(multiprocessing.cpu_count())
 
@@ -561,12 +563,12 @@ def main():
             matplotlib.pyplot.savefig(name)
             matplotlib.pyplot.clf()
 
-    TAG['resources'] = output
+    tags['resources'] = output
     logging.getLogger('bottleneck').debug("Resource usage plotting completed")
 
-    TAG.update(BenchmarkSection().gather().show().get())
-    TAG.update(WorkloadSection().gather().show.get())
-    TAG.update(ScalingSection().gather.show.get())
+    tags.update(BenchmarkSection().gather().show().get())
+    tags.update(WorkloadSection().gather().show.get())
+    tags.update(ScalingSection().gather.show.get())
 
 # TODO: historical comparison
 
@@ -580,7 +582,7 @@ def main():
         outputs.append(output)
         elapsed = end - start
         procs.append(elapsed)
-        LOG.debug("Threads at {0} took {1:.2f} seconds".format(core, elapsed))
+        log.debug("Threads at {0} took {1:.2f} seconds".format(core, elapsed))
     array = numpy.array(procs)
 
     matplotlib.pyplot.plot(procs, label="actual")
@@ -600,7 +602,7 @@ def main():
     matplotlib.pyplot.savefig('procs.pdf', bbox_inches=0)
     matplotlib.pyplot.grid(True)  
     matplotlib.pyplot.clf()
-    LOG.debug("Plotted thread scaling")
+    log.debug("Plotted thread scaling")
 
     with open(self.logger.logdir + '/threads.log', 'w') as log:
         log.write("\n".join(outputs))
@@ -609,13 +611,13 @@ def main():
 
     parallel = 2 * (procs[0] - procs[1]) / procs[0]
     serial = (procs[0] - 2 * (procs[0] - procs[1])) / procs[0]
-    TAG['serial'] = "%.5f" % serial
-    TAG['parallel'] = "%.5f" % parallel
+    tags['serial'] = "%.5f" % serial
+    tags['parallel'] = "%.5f" % parallel
 
-    TAG['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
-    TAG['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
+    tags['amdalah'] = "%.5f" % ( 1 / (serial + (1/1024) * (1 - serial)) )
+    tags['gustafson'] = "%.5f" % ( 1024 - (serial * (1024 - 1)) )
 
-    LOG.debug("Computed scaling laws")
+    log.debug("Computed scaling laws")
 
     outputs = []
     opts = []
@@ -629,21 +631,21 @@ def main():
         elapsed = end - start
         opts.append(elapsed)
         optimizations = "Optimizations at {0} took {1:.2f} seconds"
-        LOG.debug(optimizations.format(opt, elapsed))
+        log.debug(optimizations.format(opt, elapsed))
     array = numpy.array(opts)
 
     matplotlib.pyplot.plot(opts)
     matplotlib.pyplot.savefig('opts.pdf', bbox_inches=0)
     matplotlib.pyplot.clf()
-    LOG.debug("Plotted optimizations")
+    log.debug("Plotted optimizations")
 
     with open(self.logger.logdir + '/opts.log', 'w') as log:
         log.write("\n".join(outputs))
 
     command = build.format('"-O3 -ftree-vectorizer-verbose=7" 2>&1')
     output = subprocess.check_output(command, shell = True)
-    TAG['vectorizer'] = output
-    LOG.debug("Vectorization report completed")
+    tags['vectorizer'] = output
+    log.debug("Vectorization report completed")
 
     gprofgrep = 'gprof -l -b {0} | grep [a-zA-Z0-9]'
     command = ' && '.join([ build.format('"-O3 -g -pg"'),
@@ -654,8 +656,8 @@ def main():
     with open(self.logger.logdir + '/vectorization.log', 'w') as log:
         log.write(output)
 
-    TAG['profile'] = output
-    LOG.debug("Profiling report completed")
+    tags['profile'] = output
+    log.debug("Profiling report completed")
     
     environment = run.format(cores, first, program).split('./')[0]
     record = 'perf record ./{0}'.format(program)
@@ -670,8 +672,8 @@ def main():
     with open(self.logger.logdir + '/annotation.log', 'w') as log:
         log.write(output)
 
-    TAG['annotation'] = output
-    LOG.debug("Source annotation completed")
+    tags['annotation'] = output
+    log.debug("Source annotation completed")
 
     counters = 'N={0} perf stat -r 3 ./{1}'.format(last, program)
     output = subprocess.check_output(command, shell = True)
@@ -680,11 +682,11 @@ def main():
     with open(self.logger.logdir + '/counters.log', 'w') as log:
         log.write(output)
 
-    LOG.debug("Hardware counters gathering completed")
+    log.debug("Hardware counters gathering completed")
 
     template = open('/home/amore/tmp/bottleneck/bt/bt.tex', 'r').read()
     for key, value in sorted(TAG.iteritems()):
-        LOG.debug("Replacing macro {0} with {1}".format(key, value))
+        log.debug("Replacing macro {0} with {1}".format(key, value))
         template = template.replace('@@' + key.upper() + '@@',
                                     value.replace('%', '?'))
     open(program + '.tex', 'w').write(template)
